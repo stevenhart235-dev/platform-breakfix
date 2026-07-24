@@ -1,0 +1,4 @@
+# Copy this file to terraform.tfvars to override the defaults.
+aws_region         = "us-east-2"
+cluster_name       = "platform-breakfix"
+kubernetes_version = "1.36"
