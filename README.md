@@ -11,6 +11,7 @@ The repository currently contains:
 
 - an Amazon EKS cluster defined with OpenTofu-compatible Terraform
   configuration;
+- optional, generic Amazon ECR repositories for external image producers;
 - a VPC with two public subnets and a two-node EKS managed node group;
 - Kubernetes 1.36 with CoreDNS, kube-proxy, VPC CNI, EKS Pod Identity, and the
   EBS CSI managed add-on;
@@ -76,7 +77,7 @@ AWS profiles and kubeconfig files are separate between Windows and WSL.
 
 ```text
 .
-├── infrastructure/eks/        # OpenTofu EKS, VPC, add-ons, and node group
+├── infrastructure/eks/        # OpenTofu AWS infrastructure, including optional ECR
 ├── kubernetes/
 │   ├── namespaces/            # platform and diagnostics namespaces
 │   ├── apps/                  # nginx, podinfo, whoami, and curl
@@ -92,6 +93,9 @@ AWS profiles and kubeconfig files are separate between Windows and WSL.
 
 Each Kubernetes object is kept in its own YAML file and related resources are
 composed with Kustomize.
+
+See [docs/ECR.md](docs/ECR.md) for the optional repository schema, defaults,
+outputs, lifecycle policy, teardown behavior, and external workload boundary.
 
 ## Provision and connect
 
@@ -235,6 +239,8 @@ sensitive data in the example manifests.
 - `scripts/Remove-Lab.ps1` is empty.
 - The `scheduling`, `policies`, and `failures` Kustomizations are empty.
 - Terraform state is local; no remote backend is configured.
+- ECR image building, pushing, and workload deployment require separately
+  authorized external tooling.
 
 ## Planned lab ideas
 
