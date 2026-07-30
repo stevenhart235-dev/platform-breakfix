@@ -6,16 +6,15 @@ The current cluster has the EBS CSI driver and its AWS permissions, but it has
 no declarative `StorageClass`. Those are separate concerns: the driver can
 provision volumes only after a Kubernetes `StorageClass` tells it how to do so.
 
-The recommended design is a small, versioned Kubernetes manifest owned by the
-UDS bundle and applied as an early, ordered prerequisite of the bundle. It
-should define one default `gp3` class using `ebs.csi.aws.com`,
-`WaitForFirstConsumer`, volume expansion, encryption, and an explicitly chosen
-reclaim policy. This keeps Kubernetes workload policy with the Kubernetes/UDS
-deployment layer, avoids OpenTofu's new-cluster provider bootstrap problem, and
-preserves the desired three-command workflow.
+The selected design is a small, versioned Kubernetes manifest under
+`kubernetes/storage`, composed with the rest of the learning baseline by
+Kustomize. It defines one default `gp3` class using `ebs.csi.aws.com`,
+`WaitForFirstConsumer`, volume expansion, and encryption. This keeps Kubernetes
+workload policy in the Kubernetes deployment layer and avoids OpenTofu's
+new-cluster provider bootstrap problem.
 
-This document is design-only. No StorageClass or related automation has been
-implemented.
+The manifest now exists at `kubernetes/storage/gp3-storageclass.yaml`.
+Packaging the Kustomize baseline into a UDS bundle remains a separate task.
 
 ## 1. Why gp3 is absent
 
@@ -65,8 +64,9 @@ default `gp3` class is expected behavior, not a failed add-on installation.
 
 ## 4. Recommended approach
 
-Add a versioned `storage.k8s.io/v1` manifest to the UDS bundle and order it
-before every package that may create a PVC. The proposed object should have:
+Manage a versioned `storage.k8s.io/v1` manifest with the Kubernetes learning
+baseline and order it before every workload that may create a PVC. The object
+has:
 
 - a stable name such as `gp3`;
 - `storageclass.kubernetes.io/is-default-class: "true"`;
@@ -74,8 +74,8 @@ before every package that may create a PVC. The proposed object should have:
 - `parameters.type: gp3` and `parameters.encrypted: "true"`;
 - `volumeBindingMode: WaitForFirstConsumer`;
 - `allowVolumeExpansion: true`;
-- an explicitly selected `reclaimPolicy` (`Delete` for a disposable lab is the
-  likely choice, subject to confirmation).
+- the Kubernetes default `Delete` reclaim policy, appropriate for this
+  disposable lab.
 
 Kubernetes recommends `WaitForFirstConsumer` for topology-constrained storage
 so volume provisioning accounts for the consuming Pod's scheduling topology.
@@ -85,20 +85,20 @@ design should include a validation that exactly one default exists.
 ## 5. Why this approach
 
 The StorageClass is Kubernetes workload policy rather than an AWS
-infrastructure resource. UDS already supplies the authenticated Kubernetes
-deployment phase in the required workflow and can enforce ordering. Keeping
-the manifest there avoids an unsupported dependency from an OpenTofu provider
-configuration to a cluster being created in that same apply.
+infrastructure resource. Kustomize supplies a simple, visible deployment layer
+for this learning repository and can enforce ordering. Keeping the manifest
+there avoids an unsupported dependency from an OpenTofu provider configuration
+to a cluster being created in that same apply.
 
 It is also more transparent than `local-exec`: the desired object is plain
-YAML, is reviewable with the rest of the platform bundle, and can be updated or
-removed through the same deployment system.
+YAML, is reviewable with the rest of the Kubernetes baseline, and can be
+updated or removed through the same deployment system.
 
 ## 6. Operational tradeoffs
 
 - Storage is unavailable in the short interval between `tofu apply` and
-  `uds deploy`. That is acceptable if UDS is the first Kubernetes workload
-  deployment and the class package is ordered first.
+  applying the Kubernetes baseline. The root Kustomization orders the
+  StorageClass with the baseline resources.
 - Any workload installed outside UDS before the bundle would need an explicit
   class or would wait for the default class to appear.
 - Changing a default class affects PVCs that omit `storageClassName`; consumers
@@ -126,9 +126,9 @@ Yes, but with an important distinction:
   Kubernetes state/drift management and adds workstation dependencies. It is
   not recommended.
 
-For the stated end-to-end goal, no manual cluster configuration is necessary:
-the StorageClass can be reproducibly created as part of the already-required
-`uds deploy`. The resulting workflow remains exactly:
+For a UDS-driven end-to-end workflow, no extra manual cluster configuration is
+necessary once this Kustomize baseline is packaged into the UDS bundle. The
+target workflow can remain:
 
 1. `tofu apply`
 2. `Connect-Cluster.ps1` or `connect-cluster.sh`
