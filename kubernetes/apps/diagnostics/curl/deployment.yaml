@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curl
+  labels:
+    app.kubernetes.io/name: curl
+    app.kubernetes.io/component: diagnostics
+    app.kubernetes.io/part-of: platform-breakfix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: curl
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: curl
+        app.kubernetes.io/component: diagnostics
+        app.kubernetes.io/part-of: platform-breakfix
+    spec:
+      serviceAccountName: curl
+      containers:
+        - name: curl
+          image: curlimages/curl:8.12.1
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 25m
+              memory: 32Mi
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -r /etc/resolv.conf"]
+            initialDelaySeconds: 1
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -r /etc/resolv.conf"]
+            initialDelaySeconds: 5
+            periodSeconds: 20
