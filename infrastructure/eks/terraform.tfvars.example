@@ -2,3 +2,13 @@
 aws_region         = "us-east-2"
 cluster_name       = "platform-breakfix"
 kubernetes_version = "1.36"
+
+# Optional generic container registries. Set this to {} to create none.
+ecr_repositories = {
+  example = {
+    name                   = "example/repository"
+    preserve_on_destroy    = false
+    max_untagged_image_age = 7
+    max_tagged_images      = 20
+  }
+}

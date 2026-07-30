@@ -32,3 +32,18 @@ output "node_group_names" {
   description = "Names of the EKS managed node groups."
   value       = keys(module.eks.eks_managed_node_groups)
 }
+
+output "ecr_repositories" {
+  description = "Created ECR repository details, keyed by the configured logical identifier."
+  value = {
+    for key, repository in merge(
+      aws_ecr_repository.destroyable,
+      aws_ecr_repository.preserved,
+      ) : key => {
+      name        = repository.name
+      arn         = repository.arn
+      uri         = repository.repository_url
+      registry_id = repository.registry_id
+    }
+  }
+}
