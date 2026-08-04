@@ -115,6 +115,25 @@ The structured output is keyed exactly like the input and provides `name`,
 `arn`, `uri`, and `registry_id` for each repository. It is `{}` when ECR is
 not configured.
 
+## Disposable Seneschal lab repositories
+
+The example configuration for this disposable lab provisions these release
+artifact repositories:
+
+- `seneschal/core`
+- `seneschal/migrations`
+- `seneschal/demo-deployment-worker`
+
+`platform-breakfix` provisions only the reusable ECR infrastructure.
+`seneschal-core` builds and publishes the core and migration images, including
+`seneschal/migrations:<release-tag>`. The repository that owns
+`seneschal/demo-deployment-worker` builds and publishes that worker image.
+`seneschal-demo-lab` references and consumes the published images during
+deployment.
+
+Image building, pushing, tagging, and deployment are not responsibilities of
+`platform-breakfix`.
+
 The EKS module attaches the standard Amazon ECR read-only managed policy to
 managed node roles, so no additional IAM policy is created. Image builders and
 deployment systems must obtain their own authentication and least-privilege
