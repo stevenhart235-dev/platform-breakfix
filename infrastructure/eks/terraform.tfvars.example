@@ -12,6 +12,13 @@ ecr_repositories = {
     max_tagged_images      = 20
   }
 
+  migrations = {
+    name                   = "seneschal/migrations"
+    preserve_on_destroy    = false
+    max_untagged_image_age = 7
+    max_tagged_images      = 20
+  }
+
   worker = {
     name                   = "seneschal/demo-deployment-worker"
     preserve_on_destroy    = false
