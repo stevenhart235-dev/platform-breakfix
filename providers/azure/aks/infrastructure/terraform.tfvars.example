@@ -1,0 +1,13 @@
+# AKS Milestone 1 defaults. Override only after running doctor and reviewing plan.
+subscription_id    = "0071dee8-974f-4f93-ad2a-0960557e1888"
+location           = "eastus2"
+cluster_name       = "platform-breakfix-aks"
+kubernetes_version = "1.35.7"
+node_vm_size       = "Standard_D2as_v7"
+node_count         = 1
+
+vnet_cidr       = "10.20.0.0/16"
+aks_subnet_cidr = "10.20.0.0/22"
+pod_cidr        = "10.244.0.0/16"
+service_cidr    = "10.2.0.0/16"
+dns_service_ip  = "10.2.0.10"

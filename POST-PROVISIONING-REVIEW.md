@@ -26,5 +26,6 @@ flow as `connect-cluster.sh`.
 
 The EBS StorageClass follow-up is analyzed in
 [EBS-STORAGECLASS-DESIGN.md](EBS-STORAGECLASS-DESIGN.md). A default `gp3`
-manifest now exists under `kubernetes/storage` and is included by the root
-Kustomization; packaging that baseline into UDS remains future work.
+manifest now exists under `providers/aws/eks/kubernetes/storage` and is
+included by the canonical EKS composition and compatibility root;
+packaging that baseline into UDS remains future work.

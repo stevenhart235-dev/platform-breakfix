@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-breakfix-validation
+  labels:
+    app.kubernetes.io/part-of: platform-breakfix
+    platform-breakfix/concern: validation
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: block-storage-smoke
+  namespace: platform-breakfix-validation
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: block-storage-smoke
+  namespace: platform-breakfix-validation
+  labels:
+    app.kubernetes.io/name: block-storage-smoke
+    app.kubernetes.io/part-of: platform-breakfix
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  containers:
+    - name: smoke
+      image: busybox:1.37.0
+      command:
+        - /bin/sh
+        - -c
+        - printf 'platform-breakfix-storage-ok' > /data/probe && sleep 3600
+      resources:
+        requests:
+          cpu: 5m
+          memory: 8Mi
+        limits:
+          cpu: 25m
+          memory: 32Mi
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: block-storage-smoke

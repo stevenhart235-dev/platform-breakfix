@@ -9,6 +9,8 @@ production-platform complexity.
 
 The repository currently contains:
 
+- a tested, disposable Azure AKS Milestone 1 provider using Azure CNI Overlay,
+  one `Standard_D2as_v7` node, and AKS-managed Azure Disk CSI;
 - an Amazon EKS cluster defined with OpenTofu-compatible Terraform
   configuration;
 - optional, generic Amazon ECR repositories for external image producers;
@@ -82,11 +84,15 @@ AWS profiles and kubeconfig files are separate between Windows and WSL.
 │   ├── namespaces/            # platform and diagnostics namespaces
 │   ├── apps/                  # nginx, podinfo, whoami, and curl
 │   ├── ingress/               # nginx Ingress
-│   ├── storage/               # default gp3 StorageClass
+│   ├── shared/                # provider-independent namespace/workload baseline
 │   ├── scheduling/            # empty extension point
 │   ├── policies/              # empty extension point
 │   └── failures/              # empty extension point
 ├── charts/                    # policy placeholder; no Helm chart yet
+├── providers/aws/eks/         # canonical EKS Kubernetes additions/composition
+├── providers/azure/aks/       # AKS infrastructure, composition, and lifecycle
+├── standards/                 # lifecycle and v0 acceptance contract
+├── validation/                # common and provider validation logic
 ├── scripts/                   # cluster connection scripts
 └── docs/                      # Kubernetes lab instructions
 ```
@@ -96,6 +102,8 @@ composed with Kustomize.
 
 See [docs/ECR.md](docs/ECR.md) for the optional repository schema, defaults,
 outputs, lifecycle policy, teardown behavior, and external workload boundary.
+See [docs/AKS-MILESTONE-1.md](docs/AKS-MILESTONE-1.md) for the tested AKS
+architecture, lifecycle, validation, timings, cleanup audit, and limitations.
 
 ## Provision and connect
 
@@ -127,6 +135,16 @@ Both scripts verify `aws` and `kubectl`, call
 `aws sts get-caller-identity`, update the EKS kubeconfig, and run
 `kubectl get nodes`.
 
+After bootstrapping, run the machine-detectable v0 checks from PowerShell:
+
+```powershell
+.\scripts\Validate-Lab.ps1 -Provider eks
+```
+
+Override `-ClusterName`, `-CloudLocation`, `-ExpectedNodeCount`, or
+`-ExpectedContext` when the infrastructure inputs differ from their defaults.
+The validator refuses to run against an unexpected kubeconfig context.
+
 ## Deploy and inspect the Kubernetes baseline
 
 Render before applying:
@@ -143,6 +161,10 @@ kubectl get all -n platform
 kubectl get all -n diagnostics
 kubectl get storageclass
 ```
+
+`kubernetes` remains a compatibility entry point for EKS. New lifecycle tooling
+uses `providers/aws/eks/kubernetes`; the portable workload-only baseline is
+`kubernetes/shared`.
 
 Test service discovery from the curl workload:
 
@@ -173,8 +195,8 @@ The repository does not build, download, or version this archive.
 Installing the EBS CSI add-on provides the storage driver, not a default
 StorageClass. Without a suitable class, PVCs that rely on dynamic provisioning
 can remain pending. The lab now includes
-`kubernetes/storage/gp3-storageclass.yaml`, which declares encrypted `gp3`
-volumes, expansion support, and `WaitForFirstConsumer`.
+`providers/aws/eks/kubernetes/storage/gp3-storageclass.yaml`, which declares
+encrypted `gp3` volumes, expansion support, and `WaitForFirstConsumer`.
 
 See [EBS-STORAGECLASS-DESIGN.md](EBS-STORAGECLASS-DESIGN.md) for the design
 tradeoffs.

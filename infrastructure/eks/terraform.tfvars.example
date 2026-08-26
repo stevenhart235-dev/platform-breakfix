@@ -7,14 +7,14 @@ kubernetes_version = "1.36"
 ecr_repositories = {
   core = {
     name                   = "seneschal/core"
-    preserve_on_destroy    = false
+    preserve_on_destroy    = true
     max_untagged_image_age = 7
     max_tagged_images      = 20
   }
 
   migrations = {
     name                   = "seneschal/migrations"
-    preserve_on_destroy    = false
+    preserve_on_destroy    = true
     max_untagged_image_age = 7
     max_tagged_images      = 20
   }

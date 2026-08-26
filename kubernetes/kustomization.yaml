@@ -1,10 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespaces
-  - apps
+  # Transitional EKS-compatible entry point. New provider lifecycle tooling
+  # should use the canonical composition under providers/<cloud>/<service>.
+  - shared
   - ingress
   - scheduling
-  - storage
   - policies
   - failures
+  - ../providers/aws/eks/kubernetes/storage

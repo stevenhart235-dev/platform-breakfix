@@ -1,0 +1,70 @@
+variable "subscription_id" {
+  description = "Azure subscription that owns the ephemeral AKS lab."
+  type        = string
+  default     = "0071dee8-974f-4f93-ad2a-0960557e1888"
+}
+
+variable "location" {
+  description = "Azure region for the AKS lab."
+  type        = string
+  default     = "eastus2"
+}
+
+variable "cluster_name" {
+  description = "AKS cluster name."
+  type        = string
+  default     = "platform-breakfix-aks"
+}
+
+variable "kubernetes_version" {
+  description = "Exact GA AKS Kubernetes patch validated by doctor."
+  type        = string
+  default     = "1.35.7"
+}
+
+variable "node_vm_size" {
+  description = "VM SKU for the fixed AKS system node pool."
+  type        = string
+  default     = "Standard_D2as_v7"
+}
+
+variable "node_count" {
+  description = "Fixed node count for the Milestone 1 system pool."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.node_count == 1
+    error_message = "AKS Milestone 1 uses exactly one fixed system node."
+  }
+}
+
+variable "vnet_cidr" {
+  description = "Address space for the dedicated AKS virtual network."
+  type        = string
+  default     = "10.20.0.0/16"
+}
+
+variable "aks_subnet_cidr" {
+  description = "Address prefix for the dedicated AKS node subnet."
+  type        = string
+  default     = "10.20.0.0/22"
+}
+
+variable "pod_cidr" {
+  description = "Azure CNI Overlay pod address space."
+  type        = string
+  default     = "10.244.0.0/16"
+}
+
+variable "service_cidr" {
+  description = "Kubernetes Service address space."
+  type        = string
+  default     = "10.2.0.0/16"
+}
+
+variable "dns_service_ip" {
+  description = "CoreDNS service IP inside the Kubernetes Service CIDR."
+  type        = string
+  default     = "10.2.0.10"
+}

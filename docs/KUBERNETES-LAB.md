@@ -2,7 +2,10 @@
 
 The manifests are grouped by concern and composed with Kustomize. Every
 Kubernetes object has its own YAML file so it can be inspected, changed, and
-broken independently.
+broken independently. `kubernetes/shared` is the provider-independent baseline.
+The canonical EKS composition under `providers/aws/eks/kubernetes` adds the
+AWS-specific default EBS StorageClass and retains the existing optional Ingress
+and extension points.
 
 ## Deploy
 
@@ -16,6 +19,19 @@ Apply the complete baseline:
 
 ```bash
 kubectl apply -k kubernetes
+```
+
+The root command remains an EKS-compatible transition entry point. The
+equivalent canonical provider command is:
+
+```bash
+kubectl apply -k providers/aws/eks/kubernetes
+```
+
+Render only the portable baseline with:
+
+```bash
+kubectl kustomize kubernetes/shared
 ```
 
 Apply one application while experimenting:
@@ -50,7 +66,8 @@ in Helm-based lab setup, not in these application manifests.
 
 ## Extend
 
-Add scheduling exercises under `kubernetes/scheduling`, policies under
-`kubernetes/policies`, storage exercises under `kubernetes/storage`, and
-deliberately broken resources under `kubernetes/failures`. Add each new object
-as its own file and include it from the nearest `kustomization.yaml`.
+Add portable scheduling exercises under `kubernetes/scheduling`, policies under
+`kubernetes/policies`, and deliberately broken resources under
+`kubernetes/failures`. Provider storage configuration belongs under the
+provider composition, such as `providers/aws/eks/kubernetes/storage`. Add each
+new object as its own file and include it from the nearest `kustomization.yaml`.

@@ -6,14 +6,15 @@ The current cluster has the EBS CSI driver and its AWS permissions, but it has
 no declarative `StorageClass`. Those are separate concerns: the driver can
 provision volumes only after a Kubernetes `StorageClass` tells it how to do so.
 
-The selected design is a small, versioned Kubernetes manifest under
-`kubernetes/storage`, composed with the rest of the learning baseline by
-Kustomize. It defines one default `gp3` class using `ebs.csi.aws.com`,
+The selected design is a small, versioned provider manifest under
+`providers/aws/eks/kubernetes/storage`, composed with the shared learning
+baseline by Kustomize. It defines one default `gp3` class using `ebs.csi.aws.com`,
 `WaitForFirstConsumer`, volume expansion, and encryption. This keeps Kubernetes
 workload policy in the Kubernetes deployment layer and avoids OpenTofu's
 new-cluster provider bootstrap problem.
 
-The manifest now exists at `kubernetes/storage/gp3-storageclass.yaml`.
+The manifest now exists at
+`providers/aws/eks/kubernetes/storage/gp3-storageclass.yaml`.
 Packaging the Kustomize baseline into a UDS bundle remains a separate task.
 
 ## 1. Why gp3 is absent
@@ -64,8 +65,8 @@ default `gp3` class is expected behavior, not a failed add-on installation.
 
 ## 4. Recommended approach
 
-Manage a versioned `storage.k8s.io/v1` manifest with the Kubernetes learning
-baseline and order it before every workload that may create a PVC. The object
+Manage a versioned `storage.k8s.io/v1` manifest with the EKS Kubernetes
+composition and apply it before every workload that may create a PVC. The object
 has:
 
 - a stable name such as `gp3`;
@@ -84,11 +85,11 @@ design should include a validation that exactly one default exists.
 
 ## 5. Why this approach
 
-The StorageClass is Kubernetes workload policy rather than an AWS
-infrastructure resource. Kustomize supplies a simple, visible deployment layer
-for this learning repository and can enforce ordering. Keeping the manifest
-there avoids an unsupported dependency from an OpenTofu provider configuration
-to a cluster being created in that same apply.
+The StorageClass is Kubernetes policy with an AWS-specific provisioner rather
+than an AWS infrastructure resource. The EKS Kustomize composition supplies a
+simple, visible deployment layer while keeping it out of the portable baseline.
+This also avoids an unsupported dependency from an OpenTofu provider
+configuration to a cluster being created in that same apply.
 
 It is also more transparent than `local-exec`: the desired object is plain
 YAML, is reviewable with the rest of the Kubernetes baseline, and can be
@@ -97,8 +98,8 @@ updated or removed through the same deployment system.
 ## 6. Operational tradeoffs
 
 - Storage is unavailable in the short interval between `tofu apply` and
-  applying the Kubernetes baseline. The root Kustomization orders the
-  StorageClass with the baseline resources.
+  applying the EKS Kubernetes composition. The compatibility root and canonical
+  EKS composition both include the StorageClass with the baseline resources.
 - Any workload installed outside UDS before the bundle would need an explicit
   class or would wait for the default class to appear.
 - Changing a default class affects PVCs that omit `storageClassName`; consumers
