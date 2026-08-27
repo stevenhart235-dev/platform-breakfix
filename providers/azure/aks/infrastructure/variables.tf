@@ -39,6 +39,17 @@ variable "node_count" {
   }
 }
 
+variable "lab_ttl_hours" {
+  description = "Advisory PAYG lab lifetime in hours; expires_at does not trigger automatic deletion."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.lab_ttl_hours >= 1 && var.lab_ttl_hours <= 24 && floor(var.lab_ttl_hours) == var.lab_ttl_hours
+    error_message = "lab_ttl_hours must be a whole number from 1 through 24."
+  }
+}
+
 variable "vnet_cidr" {
   description = "Address space for the dedicated AKS virtual network."
   type        = string

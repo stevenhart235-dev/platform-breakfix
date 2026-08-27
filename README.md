@@ -104,6 +104,9 @@ See [docs/ECR.md](docs/ECR.md) for the optional repository schema, defaults,
 outputs, lifecycle policy, teardown behavior, and external workload boundary.
 See [docs/AKS-MILESTONE-1.md](docs/AKS-MILESTONE-1.md) for the tested AKS
 architecture, lifecycle, validation, timings, cleanup audit, and limitations.
+See [docs/AKS-MILESTONE-2.md](docs/AKS-MILESTONE-2.md) for PAYG ownership tags,
+the advisory four-hour TTL, cost visibility, stale-lab detection, and duplicate
+provision protection.
 
 ## Provision and connect
 

@@ -6,13 +6,18 @@ locals {
   identity_name            = "id-platform-breakfix-aks"
 
   tags = {
-    Project   = "platform-breakfix"
-    Provider  = "aks"
-    Purpose   = "Ephemeral Kubernetes break-fix lab"
-    Lifecycle = "ephemeral"
-    ManagedBy = "OpenTofu"
+    Project          = "platform-breakfix"
+    PlatformBreakfix = "true"
+    Provider         = "aks"
+    Purpose          = "ephemeral-lab"
+    Lifecycle        = "ephemeral"
+    ManagedBy        = "OpenTofu"
+    CreatedAt        = time_static.lab.rfc3339
+    ExpiresAt        = timeadd(time_static.lab.rfc3339, "${var.lab_ttl_hours}h")
   }
 }
+
+resource "time_static" "lab" {}
 
 resource "azurerm_resource_group" "lab" {
   name     = local.resource_group_name

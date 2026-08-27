@@ -52,3 +52,18 @@ output "node_count" {
   description = "Expected fixed system node count."
   value       = var.node_count
 }
+
+output "lab_created_at" {
+  description = "Stable UTC creation timestamp recorded in PAYG ownership tags."
+  value       = time_static.lab.rfc3339
+}
+
+output "lab_expires_at" {
+  description = "Advisory UTC expiration timestamp; it does not automatically delete resources."
+  value       = timeadd(time_static.lab.rfc3339, "${var.lab_ttl_hours}h")
+}
+
+output "lab_ttl_hours" {
+  description = "Configured advisory lab lifetime in hours."
+  value       = var.lab_ttl_hours
+}

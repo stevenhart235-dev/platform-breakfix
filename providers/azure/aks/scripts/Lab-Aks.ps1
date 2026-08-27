@@ -16,6 +16,8 @@ $script:AksDefaults = @{
     PodCidr               = '10.244.0.0/16'
     ServiceCidr           = '10.2.0.0/16'
     DnsServiceIp          = '10.2.0.10'
+    TtlHours              = 4
+    EstimatedNodeHourlyUsd = [decimal]0.10
     RequiredProviders     = @(
         'Microsoft.ContainerService',
         'Microsoft.Network',
@@ -23,6 +25,154 @@ $script:AksDefaults = @{
         'Microsoft.ManagedIdentity',
         'Microsoft.Storage'
     )
+}
+
+function Get-AksLabTemporalState {
+    param(
+        [Parameter(Mandatory)][string] $CreatedAt,
+        [Parameter(Mandatory)][string] $ExpiresAt,
+        [datetimeoffset] $Now = [datetimeoffset]::UtcNow
+    )
+
+    $created = [datetimeoffset]::Parse(
+        $CreatedAt, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal
+    ).ToUniversalTime()
+    $expires = [datetimeoffset]::Parse(
+        $ExpiresAt, [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AssumeUniversal
+    ).ToUniversalTime()
+    $nowUtc = $Now.ToUniversalTime()
+    $isStale = $nowUtc -ge $expires
+
+    [pscustomobject]@{
+        State     = if ($isStale) { 'STALE' } else { 'ACTIVE' }
+        CreatedAt = $created
+        ExpiresAt = $expires
+        Age       = $nowUtc - $created
+        Remaining = if ($isStale) { [timespan]::Zero } else { $expires - $nowUtc }
+        Overdue   = if ($isStale) { $nowUtc - $expires } else { [timespan]::Zero }
+    }
+}
+
+function Get-AksTagValue {
+    param(
+        [Parameter(Mandatory)] $Tags,
+        [Parameter(Mandatory)][string] $Name
+    )
+    $property = $Tags.psobject.Properties | Where-Object { $_.Name -ieq $Name } | Select-Object -First 1
+    if ($null -eq $property) { return $null }
+    return [string]$property.Value
+}
+
+function Get-AksLabStatus {
+    $exists = & az group exists --name $script:AksDefaults.ResourceGroup --output tsv
+    if ($LASTEXITCODE -ne 0) {
+        Stop-AksLifecycle "Could not determine whether resource group '$($script:AksDefaults.ResourceGroup)' exists."
+    }
+    if ($exists.Trim() -eq 'false') {
+        return [pscustomobject]@{ State = 'NO LAB'; ResourceGroup = $script:AksDefaults.ResourceGroup }
+    }
+
+    $tagsResult = & az group show --name $script:AksDefaults.ResourceGroup --query tags --output json 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Stop-AksLifecycle "Could not inspect resource group '$($script:AksDefaults.ResourceGroup)': $($tagsResult -join [Environment]::NewLine)"
+    }
+    $tags = ($tagsResult -join [Environment]::NewLine) | ConvertFrom-Json
+    $owner = Get-AksTagValue -Tags $tags -Name 'PlatformBreakfix'
+    $provider = Get-AksTagValue -Tags $tags -Name 'Provider'
+    $createdAt = Get-AksTagValue -Tags $tags -Name 'CreatedAt'
+    $expiresAt = Get-AksTagValue -Tags $tags -Name 'ExpiresAt'
+    if ($owner -ne 'true' -or $provider -ne 'aks' -or
+        [string]::IsNullOrWhiteSpace($createdAt) -or [string]::IsNullOrWhiteSpace($expiresAt)) {
+        return [pscustomobject]@{
+            State = 'EXISTING UNCLASSIFIED'; ResourceGroup = $script:AksDefaults.ResourceGroup
+            CreatedAt = $createdAt; ExpiresAt = $expiresAt
+        }
+    }
+
+    try {
+        $temporal = Get-AksLabTemporalState -CreatedAt $createdAt -ExpiresAt $expiresAt
+    }
+    catch {
+        return [pscustomobject]@{
+            State = 'EXISTING INVALID'; ResourceGroup = $script:AksDefaults.ResourceGroup
+            CreatedAt = $createdAt; ExpiresAt = $expiresAt
+        }
+    }
+    $temporal | Add-Member -NotePropertyName ResourceGroup -NotePropertyValue $script:AksDefaults.ResourceGroup
+    return $temporal
+}
+
+function Format-AksDuration {
+    param([Parameter(Mandatory)][timespan] $Duration)
+    return '{0}d {1:00}h {2:00}m' -f [math]::Floor($Duration.TotalDays), $Duration.Hours, $Duration.Minutes
+}
+
+function Show-AksLabStatus {
+    $status = Get-AksLabStatus
+    $color = if ($status.State -eq 'STALE') { 'Red' } elseif ($status.State -eq 'ACTIVE') { 'Green' } else { 'Yellow' }
+    Write-Host "`nAKS PAYG lab status: $($status.State)" -ForegroundColor $color
+    Write-Host "Resource group: $($status.ResourceGroup)"
+    if ($status.psobject.Properties.Name -contains 'CreatedAt' -and $status.CreatedAt) {
+        $createdText = if ($status.CreatedAt -is [datetimeoffset]) { $status.CreatedAt.ToString('u') } else { $status.CreatedAt }
+        Write-Host "Created:        $createdText"
+    }
+    if ($status.psobject.Properties.Name -contains 'ExpiresAt' -and $status.ExpiresAt) {
+        $expiresText = if ($status.ExpiresAt -is [datetimeoffset]) { $status.ExpiresAt.ToString('u') } else { $status.ExpiresAt }
+        Write-Host "Expires:        $expiresText"
+    }
+    if ($status.State -in @('ACTIVE', 'STALE')) {
+        Write-Host "Age:            $(Format-AksDuration -Duration $status.Age)"
+        if ($status.State -eq 'ACTIVE') {
+            Write-Host "Remaining TTL:  $(Format-AksDuration -Duration $status.Remaining)"
+        }
+        else {
+            Write-Host "Overdue by:     $(Format-AksDuration -Duration $status.Overdue)" -ForegroundColor Red
+            Write-Host 'WARNING: TTL is advisory; explicitly run destroy.' -ForegroundColor Red
+        }
+    }
+    return $status
+}
+
+function Write-AksPaygWarning {
+    $ttlCost = $script:AksDefaults.EstimatedNodeHourlyUsd * $script:AksDefaults.NodeCount * $script:AksDefaults.TtlHours
+    Write-Host @"
+
+AKS PAYG LAB
+
+Subscription:     $($script:AksDefaults.SubscriptionName)
+Region:           $($script:AksDefaults.Location)
+Node:             $($script:AksDefaults.NodeCount) x $($script:AksDefaults.VmSize)
+TTL:              $($script:AksDefaults.TtlHours) hours (advisory; no automatic deletion)
+
+Estimated compute: ~`$$($script:AksDefaults.EstimatedNodeHourlyUsd.ToString('0.00'))/hour
+Estimated lab:     ~`$$($ttlCost.ToString('0.00')) for $($script:AksDefaults.TtlHours) hours of node compute
+
+AKS Free tier has no cluster-management charge. Managed disks, Standard Load
+Balancer/public IP usage, network egress, taxes, and other usage-based Azure
+charges may apply. This estimate is informational, not billing-authoritative.
+"@ -ForegroundColor Yellow
+}
+
+function Assert-AksProvisionAllowed {
+    param($Status = (Show-AksLabStatus))
+    if ($Status.State -ne 'NO LAB') {
+        Stop-AksLifecycle "Existing AKS lab detected in '$($Status.ResourceGroup)' with state '$($Status.State)'. Explicitly inspect or destroy it before provision."
+    }
+}
+
+function Test-AksDuplicateProvisionProtection {
+    param([Parameter(Mandatory)] $Status)
+    try {
+        Assert-AksProvisionAllowed -Status $Status
+    }
+    catch {
+        if ($_.Exception.Message -notmatch '^Existing AKS lab detected') { throw }
+        Write-Host 'PASS: The normal provision gate blocks this existing PAYG lab.' -ForegroundColor Green
+        return
+    }
+    Stop-AksLifecycle 'Duplicate-provision protection did not block the existing AKS lab.'
 }
 
 function Stop-AksLifecycle {
@@ -137,11 +287,12 @@ function Invoke-AksDoctor {
         }
     }
     Write-Host 'PASS: Regional and Dasv7 family quota each have at least 2 free vCPUs.' -ForegroundColor Green
+    Show-AksLabStatus | Out-Null
 }
 
 function Write-AksConfigurationSummary {
     Write-Host @"
-AKS Milestone 1 plan
+AKS Milestone 2 PAYG plan
   subscription:    $($script:AksDefaults.SubscriptionName) ($($script:AksDefaults.SubscriptionId))
   location:        $($script:AksDefaults.Location)
   resource group:  $($script:AksDefaults.ResourceGroup)
@@ -154,6 +305,7 @@ AKS Milestone 1 plan
   API:             public, no authorized-IP restriction
   outbound:        Standard Load Balancer
   ownership:       dedicated resource group plus deterministic AKS node resource group
+  advisory TTL:    $($script:AksDefaults.TtlHours) hours; explicit destroy required
 "@
 }
 
@@ -169,11 +321,14 @@ function Invoke-AksPlan {
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('init', '-input=false')
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('fmt', '-check')
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('validate')
-        Invoke-CheckedCommand -Command $TofuPath -Arguments @('plan', '-input=false', '-out=aks.tfplan')
+        Invoke-CheckedCommand -Command $TofuPath -Arguments @(
+            'plan', '-input=false', "-var=lab_ttl_hours=$($script:AksDefaults.TtlHours)", '-out=aks.tfplan'
+        )
 
         $plan = & $TofuPath show -json aks.tfplan | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0) { Stop-AksLifecycle 'Could not inspect the saved AKS plan.' }
         $allowedTypes = @(
+            'time_static',
             'azurerm_resource_group',
             'azurerm_virtual_network',
             'azurerm_subnet',
@@ -184,12 +339,13 @@ function Invoke-AksPlan {
         $changes = @($plan.resource_changes | Where-Object { $_.change.actions -notcontains 'no-op' })
         $unexpected = @($changes | Where-Object { $_.type -notin $allowedTypes })
         if ($unexpected.Count -gt 0) {
-            Stop-AksLifecycle "Plan contains resources outside Milestone 1 scope: $($unexpected.type -join ', ')"
+            Stop-AksLifecycle "Plan contains resources outside Milestone 2 scope: $($unexpected.type -join ', ')"
         }
         if (@($changes | Where-Object { $_.change.actions -contains 'delete' }).Count -gt 0) {
             Stop-AksLifecycle 'Initial AKS plan unexpectedly contains delete actions.'
         }
-        Write-Host "PASS: Plan contains $($changes.Count) scoped resource changes and no unexpected types." -ForegroundColor Green
+        $azureChanges = @($changes | Where-Object { $_.provider_name -match 'azurerm' })
+        Write-Host "PASS: Plan contains $($azureChanges.Count) scoped Azure changes and $($changes.Count - $azureChanges.Count) stable timestamp state change; no unexpected types." -ForegroundColor Green
         $changes | ForEach-Object { Write-Host "  $($_.change.actions -join '/') $($_.type).$($_.name)" }
     }
     finally {
@@ -202,6 +358,10 @@ function Invoke-AksProvision {
         [Parameter(Mandatory)][string] $TofuPath,
         [Parameter(Mandatory)][string] $InfrastructureRoot
     )
+    $status = Show-AksLabStatus
+    Assert-AksProvisionAllowed -Status $status
+    Write-AksPaygWarning
+
     Push-Location $InfrastructureRoot
     try {
         if (-not (Test-Path -LiteralPath 'aks.tfplan')) {
@@ -255,6 +415,17 @@ function Invoke-AksBootstrap {
 }
 
 function Invoke-AksInspect {
+    $status = Show-AksLabStatus
+    if ($status.State -eq 'NO LAB') { return }
+    if ($status.State -ne 'ACTIVE') {
+        Stop-AksLifecycle "Expected the live repeatability lab to be ACTIVE; detected '$($status.State)'."
+    }
+    $tagTtlHours = ($status.ExpiresAt - $status.CreatedAt).TotalHours
+    if ([math]::Abs($tagTtlHours - $script:AksDefaults.TtlHours) -gt (1.0 / 60.0)) {
+        Stop-AksLifecycle "Expected an approximately $($script:AksDefaults.TtlHours)-hour tag TTL; found $tagTtlHours hours."
+    }
+    Write-Host "PASS: Ownership, CreatedAt, ExpiresAt, and approximately $($script:AksDefaults.TtlHours)-hour TTL tags are valid." -ForegroundColor Green
+    Test-AksDuplicateProvisionProtection -Status $status
     Invoke-CheckedCommand -Command 'az' -Arguments @(
         'aks', 'show', '--resource-group', $script:AksDefaults.ResourceGroup,
         '--name', $script:AksDefaults.ClusterName,
@@ -308,4 +479,8 @@ function Invoke-AksVerifyClean {
         Stop-AksLifecycle "Found $($aksLeftovers.Count) tagged AKS lab resources after destroy: $($aksLeftovers.id -join ', ')"
     }
     Write-Host 'PASS: No tagged AKS lab resources remain.' -ForegroundColor Green
+    $status = Show-AksLabStatus
+    if ($status.State -ne 'NO LAB') {
+        Stop-AksLifecycle "Expected NO LAB after cleanup; detected '$($status.State)'."
+    }
 }

@@ -8,13 +8,17 @@ param(
     [ValidateSet('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'scenario', 'inspect', 'destroy', 'verify-clean', 'full')]
     [string] $Operation,
 
-    [string] $TofuPath = 'tofu'
+    [string] $TofuPath = 'tofu',
+
+    [ValidateRange(1, 24)]
+    [int] $LabTtlHours = 4
 )
 
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $InfrastructureRoot = Join-Path $RepositoryRoot 'providers/azure/aks/infrastructure'
 . (Join-Path $RepositoryRoot 'providers/azure/aks/scripts/Lab-Aks.ps1')
+$script:AksDefaults.TtlHours = $LabTtlHours
 
 function Invoke-TimedOperation {
     param(
@@ -34,7 +38,7 @@ function Invoke-TimedOperation {
 
 function Show-TimingSummary {
     param([hashtable] $Timings)
-    Write-Host "`nAKS Milestone 1" -ForegroundColor Cyan
+    Write-Host "`nAKS Milestone 2" -ForegroundColor Cyan
     $total = [timespan]::Zero
     foreach ($name in @('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'destroy', 'verify-clean')) {
         if ($Timings.ContainsKey($name)) {
@@ -54,7 +58,7 @@ $actions = @{
     connect = { Invoke-AksConnect }
     bootstrap = { Invoke-AksBootstrap -RepositoryRoot $RepositoryRoot }
     validate = { & (Join-Path $RepositoryRoot 'scripts/Validate-Lab.ps1') -Provider aks; if ($LASTEXITCODE -ne 0) { throw 'AKS validation failed.' } }
-    scenario = { Write-Host 'No scenario is implemented for Milestone 1; the validated baseline is the scenario starting point.' }
+    scenario = { Write-Host 'No scenario is implemented for Milestone 2; the validated baseline is the scenario starting point.' }
     inspect = { Invoke-AksInspect }
     destroy = { Invoke-AksDestroy -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot -RepositoryRoot $RepositoryRoot }
     'verify-clean' = { Invoke-AksVerifyClean }

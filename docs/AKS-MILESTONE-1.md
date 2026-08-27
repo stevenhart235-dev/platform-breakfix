@@ -126,3 +126,6 @@ observed timings rather than service-level targets.
 
 The original v5 node proposals were not used because live quota was zero for
 those VM families. `Standard_D2as_v7` is the tested and required baseline SKU.
+
+Milestone 2 adds PAYG lifecycle guardrails without redesigning this baseline;
+see [AKS-MILESTONE-2.md](AKS-MILESTONE-2.md).
