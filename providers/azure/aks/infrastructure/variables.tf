@@ -28,6 +28,28 @@ variable "node_vm_size" {
   default     = "Standard_D2as_v7"
 }
 
+variable "profile_name" {
+  description = "Provider-scoped AKS profile selected by lifecycle tooling."
+  type        = string
+  default     = "minimal"
+
+  validation {
+    condition     = var.profile_name == "minimal"
+    error_message = "AKS Milestone 3 implements only the minimal profile."
+  }
+}
+
+variable "network_data_plane" {
+  description = "AKS network data plane selected by the provider-scoped profile."
+  type        = string
+  default     = "azure"
+
+  validation {
+    condition     = contains(["azure", "cilium"], var.network_data_plane)
+    error_message = "network_data_plane must be azure or cilium."
+  }
+}
+
 variable "node_count" {
   description = "Fixed node count for the Milestone 1 system pool."
   type        = number

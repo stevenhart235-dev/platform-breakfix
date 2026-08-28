@@ -3,6 +3,11 @@ output "provider" {
   value       = "aks"
 }
 
+output "profile" {
+  description = "Provider-scoped profile selected for this lab."
+  value       = var.profile_name
+}
+
 output "subscription_id" {
   description = "Azure subscription that owns the lab."
   value       = var.subscription_id

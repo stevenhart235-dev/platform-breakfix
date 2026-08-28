@@ -8,7 +8,9 @@ param(
     [string] $CloudLocation,
     [int] $ExpectedNodeCount,
     [string] $ExpectedContext,
-    [string] $ResourceGroup
+    [string] $ResourceGroup,
+    [string] $ProfileName,
+    [string] $ProfileValidationScript
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +76,15 @@ try {
                 -ExpectedNodeCount $config.ExpectedNodeCount `
                 -StorageManifest $storageManifest
             Invoke-AksValidation -Config $config -VolumeHandle $volumeHandle
+            if (-not [string]::IsNullOrWhiteSpace($ProfileValidationScript)) {
+                if (-not (Test-Path -LiteralPath $ProfileValidationScript -PathType Leaf)) {
+                    Stop-ValidationFailure "AKS profile validation script '$ProfileValidationScript' does not exist."
+                }
+                & $ProfileValidationScript -Config $config
+            }
+            if (-not [string]::IsNullOrWhiteSpace($ProfileName)) {
+                Write-ValidationPass "AKS profile validation composition completed for '$ProfileName'."
+            }
         }
     }
 

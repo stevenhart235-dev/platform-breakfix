@@ -4,6 +4,8 @@ param(
     [ValidateSet('aks')]
     [string] $Provider,
 
+    [string] $Profile = 'minimal',
+
     [Parameter(Mandatory)]
     [ValidateSet('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'scenario', 'inspect', 'destroy', 'verify-clean', 'full')]
     [string] $Operation,
@@ -17,8 +19,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $InfrastructureRoot = Join-Path $RepositoryRoot 'providers/azure/aks/infrastructure'
+$ProviderRoot = Join-Path $RepositoryRoot 'providers/azure/aks'
+. (Join-Path $ProviderRoot 'scripts/Profile-Aks.ps1')
+$ResolvedProfile = Resolve-AksProfile -Provider $Provider -ProfileName $Profile -ProfilesRoot (Join-Path $ProviderRoot 'profiles')
 . (Join-Path $RepositoryRoot 'providers/azure/aks/scripts/Lab-Aks.ps1')
 $script:AksDefaults.TtlHours = $LabTtlHours
+$script:AksDefaults.VmSize = $ResolvedProfile.InfrastructureInputs.NodeVmSize
+$script:AksDefaults.NodeCount = $ResolvedProfile.InfrastructureInputs.NodeCount
 
 function Invoke-TimedOperation {
     param(
@@ -38,7 +45,7 @@ function Invoke-TimedOperation {
 
 function Show-TimingSummary {
     param([hashtable] $Timings)
-    Write-Host "`nAKS Milestone 2" -ForegroundColor Cyan
+    Write-Host "`nAKS Milestone 3 ($($ResolvedProfile.Name) profile)" -ForegroundColor Cyan
     $total = [timespan]::Zero
     foreach ($name in @('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'destroy', 'verify-clean')) {
         if ($Timings.ContainsKey($name)) {
@@ -52,16 +59,19 @@ function Show-TimingSummary {
 
 $timings = @{}
 $actions = @{
-    doctor = { Invoke-AksDoctor -TofuPath $TofuPath }
-    plan = { Invoke-AksPlan -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot }
-    provision = { Invoke-AksProvision -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot }
-    connect = { Invoke-AksConnect }
-    bootstrap = { Invoke-AksBootstrap -RepositoryRoot $RepositoryRoot }
-    validate = { & (Join-Path $RepositoryRoot 'scripts/Validate-Lab.ps1') -Provider aks; if ($LASTEXITCODE -ne 0) { throw 'AKS validation failed.' } }
-    scenario = { Write-Host 'No scenario is implemented for Milestone 2; the validated baseline is the scenario starting point.' }
-    inspect = { Invoke-AksInspect }
-    destroy = { Invoke-AksDestroy -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot -RepositoryRoot $RepositoryRoot }
-    'verify-clean' = { Invoke-AksVerifyClean }
+    doctor = { Invoke-AksDoctor -TofuPath $TofuPath -Profile $ResolvedProfile }
+    plan = { Invoke-AksPlan -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot -Profile $ResolvedProfile }
+    provision = { Invoke-AksProvision -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot -Profile $ResolvedProfile }
+    connect = { Invoke-AksConnect -Profile $ResolvedProfile }
+    bootstrap = { Invoke-AksBootstrap -Profile $ResolvedProfile }
+    validate = {
+        & (Join-Path $RepositoryRoot 'scripts/Validate-Lab.ps1') -Provider aks -ProfileName $ResolvedProfile.Name -ProfileValidationScript $ResolvedProfile.ValidationScript
+        if ($LASTEXITCODE -ne 0) { throw 'AKS validation failed.' }
+    }
+    scenario = { Invoke-AksScenario -Profile $ResolvedProfile }
+    inspect = { Invoke-AksInspect -Profile $ResolvedProfile }
+    destroy = { Invoke-AksDestroy -TofuPath $TofuPath -InfrastructureRoot $InfrastructureRoot -Profile $ResolvedProfile }
+    'verify-clean' = { Invoke-AksVerifyClean -Profile $ResolvedProfile }
 }
 
 if ($Operation -ne 'full') {

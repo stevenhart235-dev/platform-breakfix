@@ -9,6 +9,7 @@ locals {
     Project          = "platform-breakfix"
     PlatformBreakfix = "true"
     Provider         = "aks"
+    Profile          = var.profile_name
     Purpose          = "ephemeral-lab"
     Lifecycle        = "ephemeral"
     ManagedBy        = "OpenTofu"
@@ -92,7 +93,7 @@ resource "azurerm_kubernetes_cluster" "lab" {
   network_profile {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
-    network_data_plane  = "azure"
+    network_data_plane  = var.network_data_plane
     load_balancer_sku   = "standard"
     outbound_type       = "loadBalancer"
     pod_cidr            = var.pod_cidr

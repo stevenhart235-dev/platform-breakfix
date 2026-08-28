@@ -81,13 +81,14 @@ function Get-AksLabStatus {
     $tags = ($tagsResult -join [Environment]::NewLine) | ConvertFrom-Json
     $owner = Get-AksTagValue -Tags $tags -Name 'PlatformBreakfix'
     $provider = Get-AksTagValue -Tags $tags -Name 'Provider'
+    $profile = Get-AksTagValue -Tags $tags -Name 'Profile'
     $createdAt = Get-AksTagValue -Tags $tags -Name 'CreatedAt'
     $expiresAt = Get-AksTagValue -Tags $tags -Name 'ExpiresAt'
     if ($owner -ne 'true' -or $provider -ne 'aks' -or
         [string]::IsNullOrWhiteSpace($createdAt) -or [string]::IsNullOrWhiteSpace($expiresAt)) {
         return [pscustomobject]@{
             State = 'EXISTING UNCLASSIFIED'; ResourceGroup = $script:AksDefaults.ResourceGroup
-            CreatedAt = $createdAt; ExpiresAt = $expiresAt
+            CreatedAt = $createdAt; ExpiresAt = $expiresAt; Profile = $profile
         }
     }
 
@@ -97,10 +98,11 @@ function Get-AksLabStatus {
     catch {
         return [pscustomobject]@{
             State = 'EXISTING INVALID'; ResourceGroup = $script:AksDefaults.ResourceGroup
-            CreatedAt = $createdAt; ExpiresAt = $expiresAt
+            CreatedAt = $createdAt; ExpiresAt = $expiresAt; Profile = $profile
         }
     }
     $temporal | Add-Member -NotePropertyName ResourceGroup -NotePropertyValue $script:AksDefaults.ResourceGroup
+    $temporal | Add-Member -NotePropertyName Profile -NotePropertyValue $profile
     return $temporal
 }
 
@@ -110,10 +112,14 @@ function Format-AksDuration {
 }
 
 function Show-AksLabStatus {
+    param([Parameter(Mandatory)] $Profile)
     $status = Get-AksLabStatus
     $color = if ($status.State -eq 'STALE') { 'Red' } elseif ($status.State -eq 'ACTIVE') { 'Green' } else { 'Yellow' }
     Write-Host "`nAKS PAYG lab status: $($status.State)" -ForegroundColor $color
     Write-Host "Resource group: $($status.ResourceGroup)"
+    Write-Host "Requested profile: $($Profile.Name)"
+    $detectedProfile = if ($status.psobject.Properties.Name -contains 'Profile' -and $status.Profile) { $status.Profile } else { '(none)' }
+    Write-Host "Detected profile:  $detectedProfile"
     if ($status.psobject.Properties.Name -contains 'CreatedAt' -and $status.CreatedAt) {
         $createdText = if ($status.CreatedAt -is [datetimeoffset]) { $status.CreatedAt.ToString('u') } else { $status.CreatedAt }
         Write-Host "Created:        $createdText"
@@ -136,6 +142,7 @@ function Show-AksLabStatus {
 }
 
 function Write-AksPaygWarning {
+    param([Parameter(Mandatory)] $Profile)
     $ttlCost = $script:AksDefaults.EstimatedNodeHourlyUsd * $script:AksDefaults.NodeCount * $script:AksDefaults.TtlHours
     Write-Host @"
 
@@ -143,6 +150,7 @@ AKS PAYG LAB
 
 Subscription:     $($script:AksDefaults.SubscriptionName)
 Region:           $($script:AksDefaults.Location)
+Profile:          $($Profile.Name)
 Node:             $($script:AksDefaults.NodeCount) x $($script:AksDefaults.VmSize)
 TTL:              $($script:AksDefaults.TtlHours) hours (advisory; no automatic deletion)
 
@@ -156,16 +164,17 @@ charges may apply. This estimate is informational, not billing-authoritative.
 }
 
 function Assert-AksProvisionAllowed {
-    param($Status = (Show-AksLabStatus))
+    param([Parameter(Mandatory)] $Status, [Parameter(Mandatory)] $Profile)
     if ($Status.State -ne 'NO LAB') {
+        Assert-AksLiveLabProfile -Status $Status -RequestedProfile $Profile.Name
         Stop-AksLifecycle "Existing AKS lab detected in '$($Status.ResourceGroup)' with state '$($Status.State)'. Explicitly inspect or destroy it before provision."
     }
 }
 
 function Test-AksDuplicateProvisionProtection {
-    param([Parameter(Mandatory)] $Status)
+    param([Parameter(Mandatory)] $Status, [Parameter(Mandatory)] $Profile)
     try {
-        Assert-AksProvisionAllowed -Status $Status
+        Assert-AksProvisionAllowed -Status $Status -Profile $Profile
     }
     catch {
         if ($_.Exception.Message -notmatch '^Existing AKS lab detected') { throw }
@@ -205,7 +214,7 @@ function Get-AzureManagementValue {
 }
 
 function Invoke-AksDoctor {
-    param([Parameter(Mandatory)][string] $TofuPath)
+    param([Parameter(Mandatory)][string] $TofuPath, [Parameter(Mandatory)] $Profile)
 
     foreach ($command in @('az', 'kubectl')) {
         if (-not (Get-Command $command -CommandType Application -ErrorAction SilentlyContinue)) {
@@ -287,12 +296,15 @@ function Invoke-AksDoctor {
         }
     }
     Write-Host 'PASS: Regional and Dasv7 family quota each have at least 2 free vCPUs.' -ForegroundColor Green
-    Show-AksLabStatus | Out-Null
+    $status = Show-AksLabStatus -Profile $Profile
+    if ($status.State -ne 'NO LAB') { Assert-AksLiveLabProfile -Status $status -RequestedProfile $Profile.Name }
 }
 
 function Write-AksConfigurationSummary {
+    param([Parameter(Mandatory)] $Profile)
     Write-Host @"
-AKS Milestone 2 PAYG plan
+AKS Milestone 3 PAYG plan
+  profile:         $($Profile.Name)
   subscription:    $($script:AksDefaults.SubscriptionName) ($($script:AksDefaults.SubscriptionId))
   location:        $($script:AksDefaults.Location)
   resource group:  $($script:AksDefaults.ResourceGroup)
@@ -312,19 +324,26 @@ AKS Milestone 2 PAYG plan
 function Invoke-AksPlan {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
-        [Parameter(Mandatory)][string] $InfrastructureRoot
+        [Parameter(Mandatory)][string] $InfrastructureRoot,
+        [Parameter(Mandatory)] $Profile
     )
 
-    Write-AksConfigurationSummary
+    Write-AksConfigurationSummary -Profile $Profile
     Push-Location $InfrastructureRoot
     try {
+        Remove-Item -LiteralPath 'aks.tfplan', 'aks.tfplan.profile' -Force -ErrorAction SilentlyContinue
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('init', '-input=false')
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('fmt', '-check')
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('validate')
         Invoke-CheckedCommand -Command $TofuPath -Arguments @(
-            'plan', '-input=false', "-var=lab_ttl_hours=$($script:AksDefaults.TtlHours)", '-out=aks.tfplan'
+            'plan', '-input=false',
+            "-var=lab_ttl_hours=$($script:AksDefaults.TtlHours)",
+            "-var=profile_name=$($Profile.Name)",
+            "-var=network_data_plane=$($Profile.InfrastructureInputs.NetworkDataPlane)",
+            "-var=node_vm_size=$($Profile.InfrastructureInputs.NodeVmSize)",
+            "-var=node_count=$($Profile.InfrastructureInputs.NodeCount)",
+            '-out=aks.tfplan'
         )
-
         $plan = & $TofuPath show -json aks.tfplan | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0) { Stop-AksLifecycle 'Could not inspect the saved AKS plan.' }
         $allowedTypes = @(
@@ -345,6 +364,10 @@ function Invoke-AksPlan {
             Stop-AksLifecycle 'Initial AKS plan unexpectedly contains delete actions.'
         }
         $azureChanges = @($changes | Where-Object { $_.provider_name -match 'azurerm' })
+        @{
+            Profile    = $Profile.Name
+            PlanSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath 'aks.tfplan').Hash
+        } | ConvertTo-Json -Compress | Set-Content -LiteralPath 'aks.tfplan.profile' -Encoding utf8
         Write-Host "PASS: Plan contains $($azureChanges.Count) scoped Azure changes and $($changes.Count - $azureChanges.Count) stable timestamp state change; no unexpected types." -ForegroundColor Green
         $changes | ForEach-Object { Write-Host "  $($_.change.actions -join '/') $($_.type).$($_.name)" }
     }
@@ -356,17 +379,19 @@ function Invoke-AksPlan {
 function Invoke-AksProvision {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
-        [Parameter(Mandatory)][string] $InfrastructureRoot
+        [Parameter(Mandatory)][string] $InfrastructureRoot,
+        [Parameter(Mandatory)] $Profile
     )
-    $status = Show-AksLabStatus
-    Assert-AksProvisionAllowed -Status $status
-    Write-AksPaygWarning
+    $status = Show-AksLabStatus -Profile $Profile
+    Assert-AksProvisionAllowed -Status $status -Profile $Profile
 
     Push-Location $InfrastructureRoot
     try {
         if (-not (Test-Path -LiteralPath 'aks.tfplan')) {
             Stop-AksLifecycle 'Saved plan aks.tfplan is missing; run plan before provision.'
         }
+        Assert-AksSavedPlanProfile -MetadataPath 'aks.tfplan.profile' -PlanPath 'aks.tfplan' -RequestedProfile $Profile.Name
+        Write-AksPaygWarning -Profile $Profile
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('apply', '-input=false', '-auto-approve', 'aks.tfplan')
     }
     finally { Pop-Location }
@@ -387,6 +412,7 @@ function Set-AksKubeconfigContext {
 }
 
 function Invoke-AksConnect {
+    param([Parameter(Mandatory)] $Profile)
     Invoke-CheckedCommand -Command 'az' -Arguments @(
         'aks', 'get-credentials', '--admin', '--overwrite-existing',
         '--resource-group', $script:AksDefaults.ResourceGroup,
@@ -403,9 +429,8 @@ function Invoke-AksConnect {
 }
 
 function Invoke-AksBootstrap {
-    param([Parameter(Mandatory)][string] $RepositoryRoot)
-    $composition = Join-Path $RepositoryRoot 'providers/azure/aks/kubernetes'
-    Invoke-CheckedCommand -Command 'kubectl' -Arguments @('apply', '-k', $composition)
+    param([Parameter(Mandatory)] $Profile)
+    Invoke-CheckedCommand -Command 'kubectl' -Arguments @('apply', '-k', $Profile.BootstrapComposition)
     foreach ($item in @('platform/nginx', 'platform/podinfo', 'platform/whoami', 'diagnostics/curl')) {
         $parts = $item.Split('/')
         Invoke-CheckedCommand -Command 'kubectl' -Arguments @(
@@ -415,17 +440,21 @@ function Invoke-AksBootstrap {
 }
 
 function Invoke-AksInspect {
-    $status = Show-AksLabStatus
+    param([Parameter(Mandatory)] $Profile)
+    $status = Show-AksLabStatus -Profile $Profile
     if ($status.State -eq 'NO LAB') { return }
     if ($status.State -ne 'ACTIVE') {
         Stop-AksLifecycle "Expected the live repeatability lab to be ACTIVE; detected '$($status.State)'."
     }
+    Assert-AksLiveLabProfile -Status $status -RequestedProfile $Profile.Name
+    Write-Host "Requested profile: $($Profile.Name)"
+    Write-Host "Detected profile:  $($status.Profile)"
     $tagTtlHours = ($status.ExpiresAt - $status.CreatedAt).TotalHours
     if ([math]::Abs($tagTtlHours - $script:AksDefaults.TtlHours) -gt (1.0 / 60.0)) {
         Stop-AksLifecycle "Expected an approximately $($script:AksDefaults.TtlHours)-hour tag TTL; found $tagTtlHours hours."
     }
     Write-Host "PASS: Ownership, CreatedAt, ExpiresAt, and approximately $($script:AksDefaults.TtlHours)-hour TTL tags are valid." -ForegroundColor Green
-    Test-AksDuplicateProvisionProtection -Status $status
+    Test-AksDuplicateProvisionProtection -Status $status -Profile $Profile
     Invoke-CheckedCommand -Command 'az' -Arguments @(
         'aks', 'show', '--resource-group', $script:AksDefaults.ResourceGroup,
         '--name', $script:AksDefaults.ClusterName,
@@ -441,7 +470,7 @@ function Invoke-AksDestroy {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
         [Parameter(Mandatory)][string] $InfrastructureRoot,
-        [Parameter(Mandatory)][string] $RepositoryRoot
+        [Parameter(Mandatory)] $Profile
     )
 
     $exists = & az group exists --name $script:AksDefaults.ResourceGroup --output tsv
@@ -453,7 +482,7 @@ function Invoke-AksDestroy {
         if ($LASTEXITCODE -eq 0) {
             Set-AksKubeconfigContext
             & kubectl delete namespace platform-breakfix-validation --ignore-not-found=true --wait=true --timeout=180s
-            & kubectl delete -k (Join-Path $RepositoryRoot 'providers/azure/aks/kubernetes') --ignore-not-found=true --wait=true --timeout=180s
+            & kubectl delete -k $Profile.BootstrapComposition --ignore-not-found=true --wait=true --timeout=180s
         }
     }
 
@@ -465,6 +494,7 @@ function Invoke-AksDestroy {
 }
 
 function Invoke-AksVerifyClean {
+    param([Parameter(Mandatory)] $Profile)
     foreach ($group in @($script:AksDefaults.ResourceGroup, $script:AksDefaults.NodeResourceGroup)) {
         $exists = & az group exists --name $group --output tsv
         if ($LASTEXITCODE -ne 0) { Stop-AksLifecycle "Could not verify resource group '$group'." }
@@ -479,8 +509,13 @@ function Invoke-AksVerifyClean {
         Stop-AksLifecycle "Found $($aksLeftovers.Count) tagged AKS lab resources after destroy: $($aksLeftovers.id -join ', ')"
     }
     Write-Host 'PASS: No tagged AKS lab resources remain.' -ForegroundColor Green
-    $status = Show-AksLabStatus
+    $status = Show-AksLabStatus -Profile $Profile
     if ($status.State -ne 'NO LAB') {
         Stop-AksLifecycle "Expected NO LAB after cleanup; detected '$($status.State)'."
     }
+}
+
+function Invoke-AksScenario {
+    param([Parameter(Mandatory)] $Profile)
+    Write-Host "No scenario is implemented for AKS profile '$($Profile.Name)'; the validated baseline is the scenario starting point."
 }
