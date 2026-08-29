@@ -89,6 +89,16 @@ resource "azurerm_kubernetes_cluster" "lab" {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.aks.id]
   }
+  dynamic "service_mesh_profile" {
+    for_each = var.service_mesh_mode == "Istio" ? [1] : []
+    content {
+      mode                             = "Istio"
+      revisions                        = [var.istio_revision]
+      internal_ingress_gateway_enabled = false
+      external_ingress_gateway_enabled = false
+    }
+  }
+
 
   network_profile {
     network_plugin      = "azure"

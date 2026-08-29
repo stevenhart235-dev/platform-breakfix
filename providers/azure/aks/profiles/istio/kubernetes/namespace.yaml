@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-breakfix-istio
+  labels:
+    app.kubernetes.io/part-of: platform-breakfix
+    platform-breakfix/profile: istio
+    istio.io/rev: asm-1-30

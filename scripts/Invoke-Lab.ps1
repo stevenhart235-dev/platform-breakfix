@@ -27,6 +27,7 @@ $script:AksDefaults.TtlHours = $LabTtlHours
 $script:AksDefaults.VmSize = $ResolvedProfile.InfrastructureInputs.NodeVmSize
 $script:AksDefaults.NodeCount = $ResolvedProfile.InfrastructureInputs.NodeCount
 
+$script:AksDefaults.EstimatedNodeHourlyUsd = if ($ResolvedProfile.InfrastructureInputs.NodeVmSize -eq 'Standard_D4as_v7') { [decimal]0.20 } else { [decimal]0.10 }
 function Invoke-TimedOperation {
     param(
         [Parameter(Mandatory)][string] $Name,
@@ -47,7 +48,7 @@ function Show-TimingSummary {
     param([hashtable] $Timings)
     Write-Host "`nAKS Milestone 3 ($($ResolvedProfile.Name) profile)" -ForegroundColor Cyan
     $total = [timespan]::Zero
-    foreach ($name in @('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'destroy', 'verify-clean')) {
+    foreach ($name in @('doctor', 'plan', 'provision', 'connect', 'bootstrap', 'validate', 'scenario', 'inspect', 'destroy', 'verify-clean')) {
         if ($Timings.ContainsKey($name)) {
             $elapsed = [timespan]$Timings[$name]
             $total += $elapsed
@@ -94,7 +95,7 @@ try {
         Invoke-TimedOperation -Name $name -Action $actions[$name] -Timings $timings
     }
     $provisionAttempted = $true
-    foreach ($name in @('provision', 'connect', 'bootstrap', 'validate', 'inspect')) {
+    foreach ($name in @('provision', 'connect', 'bootstrap', 'validate', 'scenario', 'inspect')) {
         Invoke-TimedOperation -Name $name -Action $actions[$name] -Timings $timings
     }
     $lifecycleSucceeded = $true

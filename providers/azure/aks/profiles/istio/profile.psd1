@@ -1,14 +1,14 @@
 @{
     SchemaVersion = 1
-    Name = 'minimal'
+    Name = 'istio'
     Provider = 'aks'
     InfrastructureInputs = @{
         NetworkDataPlane = 'azure'
-        NodeVmSize = 'Standard_D2as_v7'
+        NodeVmSize = 'Standard_D4as_v7'
         NodeCount = 1
-        ServiceMeshMode = 'Disabled'
-        IstioRevision = ''
+        ServiceMeshMode = 'Istio'
+        IstioRevision = 'asm-1-30'
     }
     BootstrapComposition = 'kubernetes'
-    ValidationScript = $null
+    ValidationScript = 'Validate-Istio.ps1'
 }

@@ -1,0 +1,12 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-mesh-source
+  namespace: platform-breakfix-istio
+spec:
+  selector:
+    matchLabels:
+      app: mesh-destination
+  action: DENY
+  rules:
+    - {}

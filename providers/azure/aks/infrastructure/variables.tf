@@ -34,8 +34,8 @@ variable "profile_name" {
   default     = "minimal"
 
   validation {
-    condition     = contains(["minimal", "cilium"], var.profile_name)
-    error_message = "profile_name must be minimal or cilium."
+    condition     = contains(["minimal", "cilium", "istio"], var.profile_name)
+    error_message = "profile_name must be minimal, cilium, or istio."
   }
 }
 
@@ -50,11 +50,32 @@ variable "network_data_plane" {
   }
 }
 
+variable "service_mesh_mode" {
+  description = "AKS-managed service mesh mode selected by the provider-scoped profile."
+  type        = string
+  default     = "Disabled"
+
+  validation {
+    condition     = contains(["Disabled", "Istio"], var.service_mesh_mode)
+    error_message = "service_mesh_mode must be Disabled or Istio."
+  }
+}
+
+variable "istio_revision" {
+  description = "Exact AKS-managed Istio revision selected by the tested profile; empty when the mesh is disabled."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = (var.service_mesh_mode == "Disabled" && var.istio_revision == "") || (var.service_mesh_mode == "Istio" && can(regex("^asm-[0-9]+-[0-9]+$", var.istio_revision)))
+    error_message = "istio_revision must be empty when service_mesh_mode is Disabled, or an asm-X-Y revision when it is Istio."
+  }
+}
+
 variable "node_count" {
   description = "Fixed node count for the Milestone 1 system pool."
   type        = number
   default     = 1
-
   validation {
     condition     = var.node_count == 1
     error_message = "AKS Milestone 1 uses exactly one fixed system node."

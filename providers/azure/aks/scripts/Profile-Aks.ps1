@@ -28,15 +28,22 @@ function Resolve-AksProfile {
     if ($manifest.Name -cne $ProfileName) { throw "Profile manifest Name '$($manifest.Name)' does not match requested profile '$ProfileName'." }
     if ($manifest.Provider -cne $Provider) { throw "Profile '$ProfileName' belongs to provider '$($manifest.Provider)', not '$Provider'." }
     if ($manifest.InfrastructureInputs -isnot [hashtable]) { throw "Profile '$ProfileName' InfrastructureInputs must be a hashtable." }
-    $allowedInputs = @('NetworkDataPlane', 'NodeVmSize', 'NodeCount')
+    $allowedInputs = @('NetworkDataPlane', 'NodeVmSize', 'NodeCount', 'ServiceMeshMode', 'IstioRevision')
+    $requiredInputs = @('NetworkDataPlane', 'NodeVmSize', 'NodeCount')
     $unknownInputs = @($manifest.InfrastructureInputs.Keys | Where-Object { $_ -notin $allowedInputs })
     if ($unknownInputs.Count -gt 0) { throw "Profile '$ProfileName' contains unknown InfrastructureInputs: $($unknownInputs -join ', ')." }
-    foreach ($inputName in $allowedInputs) {
+    foreach ($inputName in $requiredInputs) {
         if (-not $manifest.InfrastructureInputs.ContainsKey($inputName)) { throw "Profile '$ProfileName' is missing InfrastructureInput '$inputName'." }
     }
+    if (-not $manifest.InfrastructureInputs.ContainsKey('ServiceMeshMode')) { $manifest.InfrastructureInputs.ServiceMeshMode = 'Disabled' }
+    if (-not $manifest.InfrastructureInputs.ContainsKey('IstioRevision')) { $manifest.InfrastructureInputs.IstioRevision = '' }
     if ($manifest.InfrastructureInputs.NetworkDataPlane -notin @('azure', 'cilium')) { throw "Profile '$ProfileName' has unsupported NetworkDataPlane '$($manifest.InfrastructureInputs.NetworkDataPlane)'." }
     if ([string]::IsNullOrWhiteSpace([string]$manifest.InfrastructureInputs.NodeVmSize)) { throw "Profile '$ProfileName' NodeVmSize must not be empty." }
     if ($manifest.InfrastructureInputs.NodeCount -isnot [int] -or $manifest.InfrastructureInputs.NodeCount -lt 1) { throw "Profile '$ProfileName' NodeCount must be a positive integer." }
+    if ($manifest.InfrastructureInputs.ServiceMeshMode -notin @('Disabled', 'Istio')) { throw "Profile '$ProfileName' has unsupported ServiceMeshMode '$($manifest.InfrastructureInputs.ServiceMeshMode)'." }
+    $istioRevision = [string]$manifest.InfrastructureInputs.IstioRevision
+    if ($manifest.InfrastructureInputs.ServiceMeshMode -eq 'Disabled' -and -not [string]::IsNullOrEmpty($istioRevision)) { throw "Profile '$ProfileName' IstioRevision must be empty when ServiceMeshMode is Disabled." }
+    if ($manifest.InfrastructureInputs.ServiceMeshMode -eq 'Istio' -and $istioRevision -notmatch '^asm-[0-9]+-[0-9]+$') { throw "Profile '$ProfileName' IstioRevision must be an asm-X-Y revision when ServiceMeshMode is Istio." }
     $bootstrapPath = Join-Path $profileDirectory ([string]$manifest.BootstrapComposition)
     if (-not (Test-Path -LiteralPath $bootstrapPath -PathType Container) -or -not (Test-AksPathWithinRoot -Path $bootstrapPath -Root $profileDirectory)) {
         throw "Profile '$ProfileName' BootstrapComposition must reference a directory beneath its profile directory."

@@ -264,6 +264,21 @@ function Invoke-AksDoctor {
         Stop-AksLifecycle "AKS Kubernetes $($script:AksDefaults.KubernetesVersion) is not offered in $($script:AksDefaults.Location)."
     }
     Write-Host "PASS: AKS Kubernetes $($script:AksDefaults.KubernetesVersion) is offered in $($script:AksDefaults.Location)." -ForegroundColor Green
+    if ($Profile.InfrastructureInputs.ServiceMeshMode -eq 'Istio') {
+        $meshResult = & az aks mesh get-revisions --location $script:AksDefaults.Location --output json 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Stop-AksLifecycle "Could not query managed Istio revisions: $($meshResult -join [Environment]::NewLine)"
+        }
+        $meshRevisions = ($meshResult -join [Environment]::NewLine) | ConvertFrom-Json
+        $selected = @($meshRevisions.meshRevisions | Where-Object { $_.revision -ceq $Profile.InfrastructureInputs.IstioRevision })
+        $minorVersion = ($script:AksDefaults.KubernetesVersion -split '\.')[0..1] -join '.'
+        $compatible = @($selected.compatibleWith | Where-Object { $_.name -ceq 'KubernetesOfficial' -and $_.versions -contains $minorVersion })
+        if ($selected.Count -ne 1 -or $compatible.Count -ne 1) {
+            Stop-AksLifecycle "Managed Istio revision '$($Profile.InfrastructureInputs.IstioRevision)' is not offered for Kubernetes $minorVersion in $($script:AksDefaults.Location)."
+        }
+        Write-Host "PASS: Managed Istio revision $($Profile.InfrastructureInputs.IstioRevision) is offered for Kubernetes $minorVersion." -ForegroundColor Green
+    }
+
 
     $subscriptionId = $script:AksDefaults.SubscriptionId
     $skuUri = "https://management.azure.com/subscriptions/$subscriptionId/providers/Microsoft.Compute/skus?api-version=2021-07-01&`$filter=location%20eq%20'$($script:AksDefaults.Location)'"
@@ -290,12 +305,13 @@ function Invoke-AksDoctor {
     $usage = (Get-AzureManagementValue -Uri $usageUri).value
     $regional = $usage | Where-Object { $_.name.localizedValue -eq 'Total Regional vCPUs' }
     $family = $usage | Where-Object { $_.name.localizedValue -eq 'Standard Dasv7 Family vCPUs' }
+    $requiredVcpus = if ($script:AksDefaults.VmSize -eq 'Standard_D4as_v7') { 4 } else { 2 }
     foreach ($quota in @($regional, $family)) {
-        if (-not $quota -or ($quota.limit - $quota.currentValue) -lt 2) {
-            Stop-AksLifecycle "Insufficient quota for '$($quota.name.localizedValue)': usage $($quota.currentValue), limit $($quota.limit), required 2."
+        if (-not $quota -or ($quota.limit - $quota.currentValue) -lt $requiredVcpus) {
+            Stop-AksLifecycle "Insufficient quota for '$($quota.name.localizedValue)': usage $($quota.currentValue), limit $($quota.limit), required $requiredVcpus."
         }
     }
-    Write-Host 'PASS: Regional and Dasv7 family quota each have at least 2 free vCPUs.' -ForegroundColor Green
+    Write-Host "PASS: Regional and Dasv7 family quota each have at least $requiredVcpus free vCPUs." -ForegroundColor Green
     $status = Show-AksLabStatus -Profile $Profile
     if ($status.State -ne 'NO LAB') { Assert-AksLiveLabProfile -Status $status -RequestedProfile $Profile.Name }
 }
@@ -311,6 +327,7 @@ AKS Milestone 3 PAYG plan
   Kubernetes:      $($script:AksDefaults.KubernetesVersion)
   node pool:       $($script:AksDefaults.NodeCount) x $($script:AksDefaults.VmSize), fixed System pool
   networking:      Azure CNI Overlay
+  service mesh:    $($Profile.InfrastructureInputs.ServiceMeshMode)$(if ($Profile.InfrastructureInputs.IstioRevision) { " ($($Profile.InfrastructureInputs.IstioRevision))" })
   VNet/subnet:     $($script:AksDefaults.VnetCidr) / $($script:AksDefaults.SubnetCidr)
   pod/service:     $($script:AksDefaults.PodCidr) / $($script:AksDefaults.ServiceCidr)
   DNS service IP:  $($script:AksDefaults.DnsServiceIp)
@@ -342,6 +359,8 @@ function Invoke-AksPlan {
             "-var=network_data_plane=$($Profile.InfrastructureInputs.NetworkDataPlane)",
             "-var=node_vm_size=$($Profile.InfrastructureInputs.NodeVmSize)",
             "-var=node_count=$($Profile.InfrastructureInputs.NodeCount)",
+            "-var=service_mesh_mode=$($Profile.InfrastructureInputs.ServiceMeshMode)",
+            "-var=istio_revision=$($Profile.InfrastructureInputs.IstioRevision)",
             '-out=aks.tfplan'
         )
         $plan = & $TofuPath show -json aks.tfplan | ConvertFrom-Json
@@ -466,11 +485,25 @@ function Invoke-AksInspect {
     }
     Write-Host "PASS: Ownership, CreatedAt, ExpiresAt, and approximately $($script:AksDefaults.TtlHours)-hour TTL tags are valid." -ForegroundColor Green
     Write-Host "PASS: Azure reports the '$detectedDataPlane' network data plane required by profile '$($Profile.Name)'." -ForegroundColor Green
+    if ($Profile.InfrastructureInputs.ServiceMeshMode -eq 'Istio') {
+        $mesh = & az aks show --resource-group $script:AksDefaults.ResourceGroup --name $script:AksDefaults.ClusterName --query serviceMeshProfile --output json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or -not $mesh) { Stop-AksLifecycle 'Could not detect the live AKS service mesh profile.' }
+        $meshMode = [string]$mesh.mode
+        $meshRevisions = @($mesh.istio.revisions)
+        Write-Host "Detected service mesh mode: $meshMode"
+        Write-Host "Detected Istio revisions: $($meshRevisions -join ', ')"
+        if ($meshMode -cne 'Istio' -or $meshRevisions.Count -ne 1 -or $meshRevisions[0] -cne $Profile.InfrastructureInputs.IstioRevision) {
+            Stop-AksLifecycle "AKS service mesh mismatch: expected Istio revision '$($Profile.InfrastructureInputs.IstioRevision)'."
+        }
+        Write-Host "PASS: Azure reports managed Istio revision '$($meshRevisions[0])'." -ForegroundColor Green
+    }
+
+
     Test-AksDuplicateProvisionProtection -Status $status -Profile $Profile
     Invoke-CheckedCommand -Command 'az' -Arguments @(
         'aks', 'show', '--resource-group', $script:AksDefaults.ResourceGroup,
         '--name', $script:AksDefaults.ClusterName,
-        '--query', '{name:name,location:location,kubernetesVersion:kubernetesVersion,provisioningState:provisioningState,nodeResourceGroup:nodeResourceGroup,networkProfile:networkProfile,identity:identity.type}',
+        '--query', '{name:name,location:location,kubernetesVersion:kubernetesVersion,provisioningState:provisioningState,nodeResourceGroup:nodeResourceGroup,networkProfile:networkProfile,serviceMeshProfile:serviceMeshProfile,identity:identity.type}',
         '--output', 'json'
     )
     Invoke-CheckedCommand -Command 'kubectl' -Arguments @('get', 'nodes', '-o', 'wide')
@@ -506,7 +539,9 @@ function Invoke-AksDestroy {
             "-var=profile_name=$($Profile.Name)",
             "-var=network_data_plane=$($Profile.InfrastructureInputs.NetworkDataPlane)",
             "-var=node_vm_size=$($Profile.InfrastructureInputs.NodeVmSize)",
-            "-var=node_count=$($Profile.InfrastructureInputs.NodeCount)"
+            "-var=node_count=$($Profile.InfrastructureInputs.NodeCount)",
+            "-var=service_mesh_mode=$($Profile.InfrastructureInputs.ServiceMeshMode)",
+            "-var=istio_revision=$($Profile.InfrastructureInputs.IstioRevision)"
         )
     }
     finally { Pop-Location }

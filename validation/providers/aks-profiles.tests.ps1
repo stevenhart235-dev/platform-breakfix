@@ -33,7 +33,9 @@ $explicit = Resolve-AksProfile -Provider aks -ProfileName minimal -ProfilesRoot 
 if ($implicit.Name -ne $explicit.Name -or
     $implicit.InfrastructureInputs.NetworkDataPlane -ne $explicit.InfrastructureInputs.NetworkDataPlane -or
     $implicit.InfrastructureInputs.NodeVmSize -ne $explicit.InfrastructureInputs.NodeVmSize -or
-    $implicit.InfrastructureInputs.NodeCount -ne $explicit.InfrastructureInputs.NodeCount) {
+    $implicit.InfrastructureInputs.NodeCount -ne $explicit.InfrastructureInputs.NodeCount -or
+    $implicit.InfrastructureInputs.ServiceMeshMode -ne 'Disabled' -or
+    $implicit.InfrastructureInputs.IstioRevision -ne '') {
     throw 'Default and explicit minimal resolution differ.'
 }
 Write-Host 'PASS: Omitted/default and explicit minimal resolve to the same normalized profile.' -ForegroundColor Green
@@ -42,10 +44,24 @@ $cilium = Resolve-AksProfile -Provider aks -ProfileName cilium -ProfilesRoot $pr
 if ($cilium.InfrastructureInputs.NetworkDataPlane -ne 'cilium' -or
     $cilium.InfrastructureInputs.NodeVmSize -ne 'Standard_D2as_v7' -or
     $cilium.InfrastructureInputs.NodeCount -ne 1 -or
+    $cilium.InfrastructureInputs.ServiceMeshMode -ne 'Disabled' -or
+    $cilium.InfrastructureInputs.IstioRevision -ne '' -or
     [string]::IsNullOrWhiteSpace($cilium.ValidationScript)) {
     throw 'Cilium did not resolve to its expected normalized profile.'
 }
 Write-Host 'PASS: Cilium resolves through the existing profile contract with the expected infrastructure inputs.' -ForegroundColor Green
+
+$istio = Resolve-AksProfile -Provider aks -ProfileName istio -ProfilesRoot $productionProfiles
+if ($istio.InfrastructureInputs.NetworkDataPlane -ne 'azure' -or
+    $istio.InfrastructureInputs.NodeVmSize -ne 'Standard_D4as_v7' -or
+    $istio.InfrastructureInputs.NodeCount -ne 1 -or
+    $istio.InfrastructureInputs.ServiceMeshMode -ne 'Istio' -or
+    $istio.InfrastructureInputs.IstioRevision -ne 'asm-1-30' -or
+    [string]::IsNullOrWhiteSpace($istio.ValidationScript)) {
+    throw 'Istio did not resolve to its expected normalized profile.'
+}
+Write-Host 'PASS: Istio resolves as an independent Azure-data-plane profile with managed revision asm-1-30.' -ForegroundColor Green
+
 
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "platform-breakfix-aks-profile-tests-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $testRoot | Out-Null
