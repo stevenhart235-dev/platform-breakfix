@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-policy-source
+  namespace: platform-breakfix-cilium
+spec:
+  podSelector:
+    matchLabels:
+      app: policy-destination
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: policy-source
+      ports:
+        - protocol: TCP
+          port: 80

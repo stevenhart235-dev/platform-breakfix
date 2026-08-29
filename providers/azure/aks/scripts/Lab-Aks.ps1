@@ -449,11 +449,23 @@ function Invoke-AksInspect {
     Assert-AksLiveLabProfile -Status $status -RequestedProfile $Profile.Name
     Write-Host "Requested profile: $($Profile.Name)"
     Write-Host "Detected profile:  $($status.Profile)"
+    $detectedDataPlane = & az aks show --resource-group $script:AksDefaults.ResourceGroup --name $script:AksDefaults.ClusterName --query networkProfile.networkDataplane --output tsv
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($detectedDataPlane)) {
+        Stop-AksLifecycle 'Could not detect the live AKS network data plane.'
+    }
+    $detectedDataPlane = $detectedDataPlane.Trim().ToLowerInvariant()
+    $expectedDataPlane = ([string]$Profile.InfrastructureInputs.NetworkDataPlane).ToLowerInvariant()
+    Write-Host "Expected network data plane: $expectedDataPlane"
+    Write-Host "Detected network data plane: $detectedDataPlane"
+    if ($detectedDataPlane -cne $expectedDataPlane) {
+        Stop-AksLifecycle "AKS network data plane mismatch: profile '$($Profile.Name)' expects '$expectedDataPlane', Azure reports '$detectedDataPlane'."
+    }
     $tagTtlHours = ($status.ExpiresAt - $status.CreatedAt).TotalHours
     if ([math]::Abs($tagTtlHours - $script:AksDefaults.TtlHours) -gt (1.0 / 60.0)) {
         Stop-AksLifecycle "Expected an approximately $($script:AksDefaults.TtlHours)-hour tag TTL; found $tagTtlHours hours."
     }
     Write-Host "PASS: Ownership, CreatedAt, ExpiresAt, and approximately $($script:AksDefaults.TtlHours)-hour TTL tags are valid." -ForegroundColor Green
+    Write-Host "PASS: Azure reports the '$detectedDataPlane' network data plane required by profile '$($Profile.Name)'." -ForegroundColor Green
     Test-AksDuplicateProvisionProtection -Status $status -Profile $Profile
     Invoke-CheckedCommand -Command 'az' -Arguments @(
         'aks', 'show', '--resource-group', $script:AksDefaults.ResourceGroup,
@@ -488,7 +500,14 @@ function Invoke-AksDestroy {
 
     Push-Location $InfrastructureRoot
     try {
-        Invoke-CheckedCommand -Command $TofuPath -Arguments @('destroy', '-input=false', '-auto-approve')
+        Invoke-CheckedCommand -Command $TofuPath -Arguments @(
+            'destroy', '-input=false', '-auto-approve',
+            "-var=lab_ttl_hours=$($script:AksDefaults.TtlHours)",
+            "-var=profile_name=$($Profile.Name)",
+            "-var=network_data_plane=$($Profile.InfrastructureInputs.NetworkDataPlane)",
+            "-var=node_vm_size=$($Profile.InfrastructureInputs.NodeVmSize)",
+            "-var=node_count=$($Profile.InfrastructureInputs.NodeCount)"
+        )
     }
     finally { Pop-Location }
 }

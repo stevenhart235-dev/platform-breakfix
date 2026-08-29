@@ -34,8 +34,8 @@ variable "profile_name" {
   default     = "minimal"
 
   validation {
-    condition     = var.profile_name == "minimal"
-    error_message = "AKS Milestone 3 implements only the minimal profile."
+    condition     = contains(["minimal", "cilium"], var.profile_name)
+    error_message = "profile_name must be minimal or cilium."
   }
 }
 

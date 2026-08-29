@@ -38,6 +38,15 @@ if ($implicit.Name -ne $explicit.Name -or
 }
 Write-Host 'PASS: Omitted/default and explicit minimal resolve to the same normalized profile.' -ForegroundColor Green
 
+$cilium = Resolve-AksProfile -Provider aks -ProfileName cilium -ProfilesRoot $productionProfiles
+if ($cilium.InfrastructureInputs.NetworkDataPlane -ne 'cilium' -or
+    $cilium.InfrastructureInputs.NodeVmSize -ne 'Standard_D2as_v7' -or
+    $cilium.InfrastructureInputs.NodeCount -ne 1 -or
+    [string]::IsNullOrWhiteSpace($cilium.ValidationScript)) {
+    throw 'Cilium did not resolve to its expected normalized profile.'
+}
+Write-Host 'PASS: Cilium resolves through the existing profile contract with the expected infrastructure inputs.' -ForegroundColor Green
+
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "platform-breakfix-aks-profile-tests-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
