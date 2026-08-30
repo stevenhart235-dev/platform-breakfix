@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: platform-breakfix-scenario
   labels:
-    platform-breakfix/owner: bad-service-selector
+    platform-breakfix/owner: service-selector-mismatch

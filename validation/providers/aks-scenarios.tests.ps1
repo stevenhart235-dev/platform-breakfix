@@ -20,19 +20,20 @@ function Write-TestScenario {
 }
 
 $productionRoot = Join-Path $RepositoryRoot 'scenarios'
-$known = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName bad-service-selector -ScenariosRoot $productionRoot
-if ($known.Name -cne 'bad-service-selector' -or $known.Provider -cne 'aks' -or $known.Profile -cne 'minimal' -or $known.Hooks.Count -ne 6) { throw 'Known scenario did not normalize correctly.' }
-Write-Host 'PASS: Known scenario resolves with all explicit hooks.' -ForegroundColor Green
 $readiness = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot
 if ($readiness.Name -cne 'readiness-probe-failure' -or $readiness.Provider -cne 'aks' -or $readiness.Profile -cne 'minimal' -or $readiness.Hooks.Count -ne 6) { throw 'Readiness scenario did not normalize correctly.' }
 Write-Host 'PASS: Readiness scenario resolves with the unchanged six-hook schema.' -ForegroundColor Green
+$selectorMismatch = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName service-selector-mismatch -ScenariosRoot $productionRoot
+if ($selectorMismatch.Name -cne 'service-selector-mismatch' -or $selectorMismatch.Provider -cne 'aks' -or $selectorMismatch.Profile -cne 'minimal' -or $selectorMismatch.Hooks.Count -ne 6) { throw 'Service selector mismatch scenario did not normalize correctly.' }
+Write-Host 'PASS: Service selector mismatch resolves with the unchanged six-hook schema.' -ForegroundColor Green
+Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName bad-service-selector -ScenariosRoot $productionRoot } 'Unknown scenario' 'Removed bad-service-selector fails closed as unknown.'
 $none = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName '' -ScenariosRoot $productionRoot
 if (-not $none.IsNone -or $none.Name -cne 'none') { throw 'Omitted scenario did not resolve as none.' }
 Write-Host 'PASS: Omitted scenario resolves as none.' -ForegroundColor Green
-Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName cilium -ScenarioName bad-service-selector -ScenariosRoot $productionRoot } 'does not support profile' 'Cilium compatibility fails closed.'
-Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName istio -ScenarioName bad-service-selector -ScenariosRoot $productionRoot } 'does not support profile' 'Istio compatibility fails closed.'
 Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName cilium -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot } 'does not support profile' 'Readiness scenario rejects Cilium.'
 Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName istio -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot } 'does not support profile' 'Readiness scenario rejects Istio.'
+Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName cilium -ScenarioName service-selector-mismatch -ScenariosRoot $productionRoot } 'does not support profile' 'Service selector mismatch rejects Cilium.'
+Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName istio -ScenarioName service-selector-mismatch -ScenariosRoot $productionRoot } 'does not support profile' 'Service selector mismatch rejects Istio.'
 
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "platform-breakfix-scenario-tests-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $testRoot | Out-Null
@@ -53,17 +54,17 @@ try {
     Write-TestScenario $testRoot missing ($base.Replace('NAME','missing').Replace("; Cleanup='Cleanup.ps1'",''));
     Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName missing -ScenariosRoot $testRoot } "missing required hook 'Cleanup'" 'Missing required hook fails closed.'
     $metadata = Join-Path $testRoot 'aks.tfplan.profile'
-    Set-Content $metadata '{"Profile":"minimal","Scenario":"bad-service-selector","PlanSha256":"test"}'
-    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario none } 'Saved plan scenario mismatch' 'Named plan cannot provision as scenario none.'
+    Set-Content $metadata '{"Profile":"minimal","Scenario":"service-selector-mismatch","PlanSha256":"test"}'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario none } 'Saved plan scenario mismatch' 'Canonical selector plan cannot provision as none.'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario readiness-probe-failure } 'Saved plan scenario mismatch' 'Canonical selector plan cannot provision as readiness.'
     Set-Content $metadata '{"Profile":"minimal","Scenario":"none","PlanSha256":"test"}'
-    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario bad-service-selector } 'Saved plan scenario mismatch' 'Scenario-none plan cannot provision as named scenario.'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario service-selector-mismatch } 'Saved plan scenario mismatch' 'Scenario-none plan cannot provision as canonical selector scenario.'
+    Set-Content $metadata '{"Profile":"minimal","Scenario":"readiness-probe-failure","PlanSha256":"test"}'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario service-selector-mismatch } 'Saved plan scenario mismatch' 'Readiness plan cannot provision as canonical selector scenario.'
+    Set-Content $metadata '{"Profile":"minimal","Scenario":"bad-service-selector","PlanSha256":"test"}'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario service-selector-mismatch } 'Saved plan scenario mismatch' 'Stale bad-service-selector metadata cannot provision as canonical selector scenario.'
     Set-Content $metadata '{"Profile":"minimal","Scenario":"first","PlanSha256":"test"}'
     Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario second } 'Saved plan scenario mismatch' 'One named scenario cannot silently become another.'
-    Set-Content $metadata '{"Profile":"minimal","Scenario":"readiness-probe-failure","PlanSha256":"test"}'
-    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario none } 'Saved plan scenario mismatch' 'Readiness plan cannot provision as scenario none.'
-    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario bad-service-selector } 'Saved plan scenario mismatch' 'Readiness plan cannot provision as bad-service-selector.'
-    Set-Content $metadata '{"Profile":"minimal","Scenario":"bad-service-selector","PlanSha256":"test"}'
-    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario readiness-probe-failure } 'Saved plan scenario mismatch' 'Selector plan cannot provision as readiness-probe-failure.'
     $liveStatus = [pscustomobject]@{ State='ACTIVE'; Profile='cilium'; ResourceGroup='rg-test' }
     Assert-ThrowsLike { Assert-AksLiveLabProfile -Status $liveStatus -RequestedProfile minimal } 'Live AKS lab profile mismatch' 'Existing profile mismatch protection remains intact.'
 } finally { if (Test-Path $testRoot) { Remove-Item $testRoot -Recurse -Force } }

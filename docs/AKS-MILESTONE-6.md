@@ -2,6 +2,8 @@
 
 Milestone 6 separates environment profiles from controlled break/fix conditions. A profile describes what environment exists; a scenario describes a condition introduced after that environment has passed baseline validation. The first and only implemented combination is `aks/minimal + bad-service-selector`.
 
+> Historical note: Milestone 6 was implemented and live-accepted under the name `bad-service-selector`. Milestone 8 later canonicalized this same behavior as `service-selector-mismatch`; the original commands and evidence below remain unchanged for historical accuracy.
+
 ## Architecture and contract
 
 Portable scenarios live under `scenarios/<name>`. Each `scenario.psd1` uses schema version 1 and declares its name, description, supported providers, supported profiles, Kubernetes composition, and repository-owned PowerShell hooks for `Inject`, `ValidateBroken`, `Inspect`, `Repair`, `ValidateRecovered`, and `Cleanup`.

@@ -1,9 +1,9 @@
 @{
     SchemaVersion = 1
-    Name = 'bad-service-selector'
+    Name = 'service-selector-mismatch'
     SupportedProviders = @('aks')
     SupportedProfiles = @('minimal')
-    Description = 'Proves and repairs a Service selector mismatch while DNS and both workloads remain healthy.'
+    Description = 'Proves and repairs a Service selector mismatch while the destination Pod remains Running and Ready.'
     KubernetesComposition = 'kubernetes'
     Hooks = @{
         Inject = 'Inject.ps1'

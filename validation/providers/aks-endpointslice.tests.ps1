@@ -1,7 +1,7 @@
 [CmdletBinding()] param()
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-. (Join-Path $RepositoryRoot 'scenarios/bad-service-selector/Scenario-Kubernetes.ps1')
+. (Join-Path $RepositoryRoot 'scenarios/service-selector-mismatch/Scenario-Kubernetes.ps1')
 
 function Assert-Count {
     param([string]$Name, [string]$Json, [int]$Expected)

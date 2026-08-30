@@ -63,6 +63,55 @@ function Get-ScenarioServiceSelector {
     [string]$service.spec.selector.app
 }
 
+function ConvertTo-ScenarioDestinationEvidence {
+    param([Parameter(Mandatory)] $Pod)
+    foreach ($section in @('metadata', 'spec', 'status')) {
+        if (-not (Test-ScenarioObjectProperty $Pod $section) -or $null -eq $Pod.$section) { Stop-ScenarioValidation "Destination Pod is missing required '$section' state." }
+    }
+    $container = @($Pod.status.containerStatuses | Where-Object { $_.name -ceq 'destination' })
+    $ready = @($Pod.status.conditions | Where-Object { $_.type -ceq 'Ready' })
+    if ($container.Count -ne 1 -or $ready.Count -ne 1) { Stop-ScenarioValidation 'Destination Pod is missing its container or Ready condition state.' }
+    [pscustomobject]@{
+        Name = [string]$Pod.metadata.name
+        Created = [datetimeoffset]$Pod.metadata.creationTimestamp
+        Phase = [string]$Pod.status.phase
+        ContainerRunning = $null -ne $container[0].state.running
+        Ready = [string]$ready[0].status
+        AppLabel = [string]$Pod.metadata.labels.app
+    }
+}
+
+function Select-ScenarioCurrentDestinationEvidence {
+    param([Parameter(Mandatory)] $PodList)
+    if (-not (Test-ScenarioObjectProperty $PodList 'items') -or $null -eq $PodList.items) { Stop-ScenarioValidation 'Pod list has no items collection.' }
+    $evidence = foreach ($pod in @($PodList.items)) {
+        if ($null -eq $pod) { Stop-ScenarioValidation 'Pod list contains a null item.' }
+        if ($pod.metadata.labels.app -cne 'scenario-destination') { continue }
+        if ((Test-ScenarioObjectProperty $pod.metadata 'deletionTimestamp') -and $null -ne $pod.metadata.deletionTimestamp) { continue }
+        ConvertTo-ScenarioDestinationEvidence $pod
+    }
+    $current = @($evidence | Sort-Object Created -Descending)
+    if ($current.Count -ne 1) { Stop-ScenarioValidation "Expected exactly one current destination Pod; found $($current.Count)." }
+    $current[0]
+}
+
+function Get-ScenarioCurrentDestinationEvidence {
+    $pods = Invoke-ScenarioKubectlJson -Arguments @('get', 'pods', '-n', $script:ScenarioNamespace, '-l', 'app=scenario-destination', '-o', 'json')
+    Select-ScenarioCurrentDestinationEvidence $pods
+}
+
+function Assert-ScenarioDestinationHealthy {
+    $destination = Get-ScenarioCurrentDestinationEvidence
+    if ($destination.Phase -cne 'Running' -or -not $destination.ContainerRunning -or $destination.Ready -cne 'True' -or $destination.AppLabel -cne 'scenario-destination') {
+        Stop-ScenarioValidation "Destination is not healthy: pod=$($destination.Name), phase=$($destination.Phase), running=$($destination.ContainerRunning), Ready=$($destination.Ready), app=$($destination.AppLabel)."
+    }
+    $destination
+}
+
+function Test-ScenarioSelectorMatchesDestination {
+    param([Parameter(Mandatory)][string] $Selector, [Parameter(Mandatory)][string] $DestinationLabel)
+    $Selector -ceq $DestinationLabel
+}
 function Invoke-ScenarioSourceCommand {
     param([Parameter(Mandatory)][string] $Command)
     $output = & kubectl exec -n $script:ScenarioNamespace deployment/scenario-source -- sh -c $Command 2>&1
