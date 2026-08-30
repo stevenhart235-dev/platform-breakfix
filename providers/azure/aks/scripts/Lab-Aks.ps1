@@ -342,7 +342,8 @@ function Invoke-AksPlan {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
         [Parameter(Mandatory)][string] $InfrastructureRoot,
-        [Parameter(Mandatory)] $Profile
+        [Parameter(Mandatory)] $Profile,
+        [Parameter(Mandatory)] $Scenario
     )
 
     Write-AksConfigurationSummary -Profile $Profile
@@ -385,6 +386,7 @@ function Invoke-AksPlan {
         $azureChanges = @($changes | Where-Object { $_.provider_name -match 'azurerm' })
         @{
             Profile    = $Profile.Name
+            Scenario   = $Scenario.Name
             PlanSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath 'aks.tfplan').Hash
         } | ConvertTo-Json -Compress | Set-Content -LiteralPath 'aks.tfplan.profile' -Encoding utf8
         Write-Host "PASS: Plan contains $($azureChanges.Count) scoped Azure changes and $($changes.Count - $azureChanges.Count) stable timestamp state change; no unexpected types." -ForegroundColor Green
@@ -399,7 +401,8 @@ function Invoke-AksProvision {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
         [Parameter(Mandatory)][string] $InfrastructureRoot,
-        [Parameter(Mandatory)] $Profile
+        [Parameter(Mandatory)] $Profile,
+        [Parameter(Mandatory)] $Scenario
     )
     $status = Show-AksLabStatus -Profile $Profile
     Assert-AksProvisionAllowed -Status $status -Profile $Profile
@@ -410,6 +413,7 @@ function Invoke-AksProvision {
             Stop-AksLifecycle 'Saved plan aks.tfplan is missing; run plan before provision.'
         }
         Assert-AksSavedPlanProfile -MetadataPath 'aks.tfplan.profile' -PlanPath 'aks.tfplan' -RequestedProfile $Profile.Name
+        Assert-AksSavedPlanScenario -MetadataPath 'aks.tfplan.profile' -RequestedScenario $Scenario.Name
         Write-AksPaygWarning -Profile $Profile
         Invoke-CheckedCommand -Command $TofuPath -Arguments @('apply', '-input=false', '-auto-approve', 'aks.tfplan')
     }
@@ -515,7 +519,8 @@ function Invoke-AksDestroy {
     param(
         [Parameter(Mandatory)][string] $TofuPath,
         [Parameter(Mandatory)][string] $InfrastructureRoot,
-        [Parameter(Mandatory)] $Profile
+        [Parameter(Mandatory)] $Profile,
+        $Scenario
     )
 
     $exists = & az group exists --name $script:AksDefaults.ResourceGroup --output tsv
@@ -526,6 +531,7 @@ function Invoke-AksDestroy {
             --context $script:AksDefaults.Context 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Set-AksKubeconfigContext
+            if ($Scenario -and -not $Scenario.IsNone) { & $Scenario.Hooks.Cleanup }
             & kubectl delete namespace platform-breakfix-validation --ignore-not-found=true --wait=true --timeout=180s
             & kubectl delete -k $Profile.BootstrapComposition --ignore-not-found=true --wait=true --timeout=180s
         }
@@ -567,9 +573,4 @@ function Invoke-AksVerifyClean {
     if ($status.State -ne 'NO LAB') {
         Stop-AksLifecycle "Expected NO LAB after cleanup; detected '$($status.State)'."
     }
-}
-
-function Invoke-AksScenario {
-    param([Parameter(Mandatory)] $Profile)
-    Write-Host "No scenario is implemented for AKS profile '$($Profile.Name)'; the validated baseline is the scenario starting point."
 }

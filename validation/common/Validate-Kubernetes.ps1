@@ -55,20 +55,23 @@ function Invoke-CommonKubernetesValidation {
     }
     Write-ValidationPass "$ExpectedNodeCount expected nodes are Ready."
 
-    Invoke-Kubectl -Arguments @(
-        'wait', '--for=condition=Ready', 'pods', '--all', '-n', 'kube-system', '--timeout=180s'
-    )
-    $systemPods = (Invoke-Kubectl -Arguments @('get', 'pods', '-n', 'kube-system', '-o', 'json') -Capture) | ConvertFrom-Json
-    if ($systemPods.items.Count -eq 0) {
-        Stop-ValidationFailure 'No kube-system pods were found.'
-    }
-    foreach ($pod in $systemPods.items) {
-        if ($pod.status.phase -eq 'Succeeded') { continue }
-        $containersReady = @($pod.status.containerStatuses).Count -gt 0 -and
-            (@($pod.status.containerStatuses | Where-Object { -not $_.ready }).Count -eq 0)
-        if ($pod.status.phase -ne 'Running' -or -not $containersReady) {
-            Stop-ValidationFailure "System pod '$($pod.metadata.name)' is not healthy (phase: $($pod.status.phase))."
-        }
+    $systemPodsDeadline = [datetimeoffset]::UtcNow.AddSeconds(180)
+    do {
+        $systemPods = (Invoke-Kubectl -Arguments @('get', 'pods', '-n', 'kube-system', '-o', 'json') -Capture) | ConvertFrom-Json
+        if ($systemPods.items.Count -eq 0) { Stop-ValidationFailure 'No kube-system pods were found.' }
+        $unhealthySystemPods = @($systemPods.items | Where-Object {
+            $systemPod = $_
+            if ($systemPod.status.phase -eq 'Succeeded') { return $false }
+            $containersReady = @($systemPod.status.containerStatuses).Count -gt 0 -and
+                (@($systemPod.status.containerStatuses | Where-Object { -not $_.ready }).Count -eq 0)
+            return $systemPod.status.phase -ne 'Running' -or -not $containersReady
+        })
+        if ($unhealthySystemPods.Count -eq 0) { break }
+        Start-Sleep -Seconds 2
+    } while ([datetimeoffset]::UtcNow -lt $systemPodsDeadline)
+    if ($unhealthySystemPods.Count -gt 0) {
+        $details = $unhealthySystemPods | ForEach-Object { "$($_.metadata.name) (phase=$($_.status.phase))" }
+        Stop-ValidationFailure "System pods did not become healthy within 180 seconds: $($details -join ', ')."
     }
     Write-ValidationPass 'System pods are healthy.'
 
