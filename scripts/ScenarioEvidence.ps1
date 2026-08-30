@@ -28,6 +28,39 @@ function Test-ScenarioEvidenceInteger {
     $Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64]
 }
 
+function Assert-ScenarioObservations {
+    param([Parameter(Mandatory)] $Observations)
+    Assert-ScenarioEvidenceKeys $Observations @('Workload','Service','Connectivity') 'Observations'
+    $workload = $Observations.Workload
+    Assert-ScenarioEvidenceKeys $workload @('DestinationPodExists','Phase','ContainerRunning','Ready','ReadinessProbePath','DestinationLabels') 'Observations.Workload'
+    Assert-ScenarioEvidenceBoolean $workload.DestinationPodExists 'Observations.Workload.DestinationPodExists'
+    Assert-ScenarioEvidenceString $workload.Phase 'Observations.Workload.Phase'
+    Assert-ScenarioEvidenceBoolean $workload.ContainerRunning 'Observations.Workload.ContainerRunning'
+    Assert-ScenarioEvidenceBoolean $workload.Ready 'Observations.Workload.Ready'
+    Assert-ScenarioEvidenceString $workload.ReadinessProbePath 'Observations.Workload.ReadinessProbePath'
+    Assert-ScenarioEvidenceKeys $workload.DestinationLabels @('app') 'Observations.Workload.DestinationLabels'
+    Assert-ScenarioEvidenceString $workload.DestinationLabels.app 'Observations.Workload.DestinationLabels.app'
+
+    $service = $Observations.Service
+    Assert-ScenarioEvidenceKeys $service @('Exists','Selector','SelectorMatchesDestinationLabel','ReadyEndpointCount') 'Observations.Service'
+    Assert-ScenarioEvidenceBoolean $service.Exists 'Observations.Service.Exists'
+    Assert-ScenarioEvidenceKeys $service.Selector @('app') 'Observations.Service.Selector'
+    Assert-ScenarioEvidenceString $service.Selector.app 'Observations.Service.Selector.app'
+    Assert-ScenarioEvidenceBoolean $service.SelectorMatchesDestinationLabel 'Observations.Service.SelectorMatchesDestinationLabel'
+    if (-not (Test-ScenarioEvidenceInteger $service.ReadyEndpointCount) -or $service.ReadyEndpointCount -lt 0) { throw 'Observations.Service.ReadyEndpointCount must be a non-negative integer.' }
+    $selectorActuallyMatches = $service.Selector.app -ceq $workload.DestinationLabels.app
+    if ($service.SelectorMatchesDestinationLabel -ne $selectorActuallyMatches) { throw 'Observations.Service.SelectorMatchesDestinationLabel is inconsistent with the selector and destination label.' }
+
+    $connectivity = $Observations.Connectivity
+    Assert-ScenarioEvidenceKeys $connectivity @('DnsSuccess','HttpSuccess','HttpStatus') 'Observations.Connectivity'
+    Assert-ScenarioEvidenceBoolean $connectivity.DnsSuccess 'Observations.Connectivity.DnsSuccess'
+    Assert-ScenarioEvidenceBoolean $connectivity.HttpSuccess 'Observations.Connectivity.HttpSuccess'
+    if ($null -ne $connectivity.HttpStatus -and (-not (Test-ScenarioEvidenceInteger $connectivity.HttpStatus) -or $connectivity.HttpStatus -lt 100 -or $connectivity.HttpStatus -gt 599)) { throw 'Observations.Connectivity.HttpStatus must be null or an integer from 100 through 599.' }
+    if ($connectivity.HttpSuccess -and $connectivity.HttpStatus -ne 200) { throw 'Observations.Connectivity.HttpSuccess=true requires HttpStatus=200.' }
+    if (-not $connectivity.HttpSuccess -and $connectivity.HttpStatus -eq 200) { throw 'Observations.Connectivity.HttpSuccess=false is inconsistent with HttpStatus=200.' }
+    $Observations
+}
+
 function Assert-ScenarioEvidenceContract {
     param([Parameter(Mandatory)] $Evidence)
     Assert-ScenarioEvidenceKeys $Evidence @('SchemaVersion','Scenario','Provider','Profile','TimestampUtc','Status','Observations','Diagnosis') 'Evidence'
@@ -36,32 +69,7 @@ function Assert-ScenarioEvidenceContract {
     $parsedTimestamp = [datetimeoffset]::MinValue
     if (-not [datetimeoffset]::TryParseExact($Evidence.TimestampUtc, 'o', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsedTimestamp)) { throw 'Evidence.TimestampUtc must use the round-trip ISO 8601 format.' }
     if ($Evidence.Status -cne 'expected_failure_confirmed') { throw "Evidence.Status '$($Evidence.Status)' is unsupported." }
-
-    Assert-ScenarioEvidenceKeys $Evidence.Observations @('Workload','Service','Connectivity') 'Evidence.Observations'
-    $workload = $Evidence.Observations.Workload
-    Assert-ScenarioEvidenceKeys $workload @('DestinationPodExists','Phase','ContainerRunning','Ready','ReadinessProbePath','DestinationLabels') 'Evidence.Observations.Workload'
-    Assert-ScenarioEvidenceBoolean $workload.DestinationPodExists 'Evidence.Observations.Workload.DestinationPodExists'
-    Assert-ScenarioEvidenceString $workload.Phase 'Evidence.Observations.Workload.Phase'
-    Assert-ScenarioEvidenceBoolean $workload.ContainerRunning 'Evidence.Observations.Workload.ContainerRunning'
-    Assert-ScenarioEvidenceBoolean $workload.Ready 'Evidence.Observations.Workload.Ready'
-    Assert-ScenarioEvidenceString $workload.ReadinessProbePath 'Evidence.Observations.Workload.ReadinessProbePath'
-    Assert-ScenarioEvidenceKeys $workload.DestinationLabels @('app') 'Evidence.Observations.Workload.DestinationLabels'
-    Assert-ScenarioEvidenceString $workload.DestinationLabels.app 'Evidence.Observations.Workload.DestinationLabels.app'
-
-    $service = $Evidence.Observations.Service
-    Assert-ScenarioEvidenceKeys $service @('Exists','Selector','SelectorMatchesDestinationLabel','ReadyEndpointCount') 'Evidence.Observations.Service'
-    Assert-ScenarioEvidenceBoolean $service.Exists 'Evidence.Observations.Service.Exists'
-    Assert-ScenarioEvidenceKeys $service.Selector @('app') 'Evidence.Observations.Service.Selector'
-    Assert-ScenarioEvidenceString $service.Selector.app 'Evidence.Observations.Service.Selector.app'
-    Assert-ScenarioEvidenceBoolean $service.SelectorMatchesDestinationLabel 'Evidence.Observations.Service.SelectorMatchesDestinationLabel'
-    if (-not (Test-ScenarioEvidenceInteger $service.ReadyEndpointCount) -or $service.ReadyEndpointCount -lt 0) { throw 'Evidence.Observations.Service.ReadyEndpointCount must be a non-negative integer.' }
-
-    $connectivity = $Evidence.Observations.Connectivity
-    Assert-ScenarioEvidenceKeys $connectivity @('DnsSuccess','HttpSuccess','HttpStatus') 'Evidence.Observations.Connectivity'
-    Assert-ScenarioEvidenceBoolean $connectivity.DnsSuccess 'Evidence.Observations.Connectivity.DnsSuccess'
-    Assert-ScenarioEvidenceBoolean $connectivity.HttpSuccess 'Evidence.Observations.Connectivity.HttpSuccess'
-    if ($null -ne $connectivity.HttpStatus -and (-not (Test-ScenarioEvidenceInteger $connectivity.HttpStatus) -or $connectivity.HttpStatus -lt 100 -or $connectivity.HttpStatus -gt 599)) { throw 'Evidence.Observations.Connectivity.HttpStatus must be null or an integer from 100 through 599.' }
-
+    Assert-ScenarioObservations $Evidence.Observations | Out-Null
     Assert-ScenarioEvidenceKeys $Evidence.Diagnosis @('Identifier','Summary') 'Evidence.Diagnosis'
     Assert-ScenarioEvidenceString $Evidence.Diagnosis.Identifier 'Evidence.Diagnosis.Identifier'
     if ($Evidence.Diagnosis.Identifier -cnotin $script:ScenarioEvidenceDiagnosticIdentifiers) { throw "Unknown evidence diagnosis identifier '$($Evidence.Diagnosis.Identifier)'." }
@@ -69,26 +77,35 @@ function Assert-ScenarioEvidenceContract {
     $Evidence
 }
 
-function New-ScenarioEvidenceDocument {
+function New-ScenarioObservations {
     param(
-        [string] $Scenario, [string] $Provider, [string] $Profile,
         [bool] $DestinationPodExists, [string] $Phase, [bool] $ContainerRunning,
         [bool] $Ready, [string] $ReadinessProbePath, [string] $DestinationLabel,
         [bool] $ServiceExists, [string] $Selector, [bool] $SelectorMatches,
         [int] $ReadyEndpointCount, [bool] $DnsSuccess, [bool] $HttpSuccess,
-        $HttpStatus, [string] $DiagnosisIdentifier, [string] $DiagnosisSummary,
+        $HttpStatus
+    )
+    $observations = [pscustomobject][ordered]@{
+        Workload = [pscustomobject][ordered]@{ DestinationPodExists=$DestinationPodExists; Phase=$Phase; ContainerRunning=$ContainerRunning; Ready=$Ready; ReadinessProbePath=$ReadinessProbePath; DestinationLabels=[pscustomobject][ordered]@{ app=$DestinationLabel } }
+        Service = [pscustomobject][ordered]@{ Exists=$ServiceExists; Selector=[pscustomobject][ordered]@{ app=$Selector }; SelectorMatchesDestinationLabel=$SelectorMatches; ReadyEndpointCount=$ReadyEndpointCount }
+        Connectivity = [pscustomobject][ordered]@{ DnsSuccess=$DnsSuccess; HttpSuccess=$HttpSuccess; HttpStatus=$HttpStatus }
+    }
+    Assert-ScenarioObservations $observations
+}
+
+function New-ScenarioEvidenceDocument {
+    param(
+        [string] $Scenario, [string] $Provider, [string] $Profile,
+        [Parameter(Mandatory)] $Observations, [Parameter(Mandatory)] $Diagnosis,
         [datetimeoffset] $Timestamp = [datetimeoffset]::UtcNow
     )
-    [pscustomobject][ordered]@{
+    Assert-ScenarioObservations $Observations | Out-Null
+    $evidence = [pscustomobject][ordered]@{
         SchemaVersion = 1; Scenario = $Scenario; Provider = $Provider; Profile = $Profile
         TimestampUtc = $Timestamp.ToString('o'); Status = 'expected_failure_confirmed'
-        Observations = [pscustomobject][ordered]@{
-            Workload = [pscustomobject][ordered]@{ DestinationPodExists=$DestinationPodExists; Phase=$Phase; ContainerRunning=$ContainerRunning; Ready=$Ready; ReadinessProbePath=$ReadinessProbePath; DestinationLabels=[pscustomobject][ordered]@{ app=$DestinationLabel } }
-            Service = [pscustomobject][ordered]@{ Exists=$ServiceExists; Selector=[pscustomobject][ordered]@{ app=$Selector }; SelectorMatchesDestinationLabel=$SelectorMatches; ReadyEndpointCount=$ReadyEndpointCount }
-            Connectivity = [pscustomobject][ordered]@{ DnsSuccess=$DnsSuccess; HttpSuccess=$HttpSuccess; HttpStatus=$HttpStatus }
-        }
-        Diagnosis = [pscustomobject][ordered]@{ Identifier=$DiagnosisIdentifier; Summary=$DiagnosisSummary }
+        Observations = $Observations; Diagnosis = $Diagnosis
     }
+    Assert-ScenarioEvidenceContract $evidence
 }
 
 function ConvertTo-ScenarioEvidenceJson {

@@ -55,4 +55,8 @@ $repair = Get-Content -Raw -LiteralPath (Join-Path $ScenarioRoot 'Repair.ps1')
 if ($inject -notmatch 'patch service' -or $inject -notmatch 'scenario-destination-missing' -or $inject -match 'patch deployment|readinessProbe') { throw 'Injection is not limited to the Service selector.' }
 if ($repair -notmatch 'patch service' -or $repair -notmatch 'scenario-destination' -or $repair -match 'patch deployment|readinessProbe') { throw 'Repair is not limited to the Service selector.' }
 Write-Host 'PASS: Render and hooks preserve probes/workloads and change only the Service selector.' -ForegroundColor Green
+$inspect = Get-Content -Raw -LiteralPath (Join-Path $ScenarioRoot 'Inspect.ps1')
+if ($inspect -notmatch 'New-ScenarioObservations' -or $inspect -notmatch 'Resolve-ScenarioDiagnosis' -or $inspect -notmatch 'Write-ScenarioEvidence' -or $inspect -notmatch 'PASS: Diagnosis:') { throw 'Selector Inspect is not integrated with observation-derived diagnosis and evidence output.' }
+if ($inspect -match 'readiness_probe_failure|service_selector_mismatch|DiagnosisIdentifier|DiagnosisSummary') { throw 'Selector Inspect still selects a diagnosis identifier or summary.' }
+Write-Host 'PASS: Selector Inspect delegates diagnosis while preserving human-readable evidence.' -ForegroundColor Green
 Write-Host 'PASS: Service selector mismatch deterministic tests completed without Kubernetes or Azure access.' -ForegroundColor Green

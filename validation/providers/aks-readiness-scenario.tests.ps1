@@ -58,4 +58,13 @@ $sourceDocument = @($documents | Where-Object { $_ -match '(?m)^kind: Deployment
 if ($destinationDocument.Count -ne 1 -or $destinationDocument[0] -notmatch '(?m)^  strategy:\s*\r?\n    type: Recreate\s*$') { throw 'Rendered destination Deployment strategy is not Recreate.' }
 if ($sourceDocument.Count -ne 1 -or $sourceDocument[0] -match '(?m)^  strategy:\s*$') { throw 'Source Deployment unexpectedly received a rollout strategy.' }
 Write-Host 'PASS: Rendered destination alone uses strategy.type=Recreate.' -ForegroundColor Green
+$scenarioRoot = Join-Path $RepositoryRoot 'scenarios/readiness-probe-failure'
+$inspect = Get-Content -Raw -LiteralPath (Join-Path $scenarioRoot 'Inspect.ps1')
+if ($inspect -notmatch 'New-ScenarioObservations' -or $inspect -notmatch 'Resolve-ScenarioDiagnosis' -or $inspect -notmatch 'Write-ScenarioEvidence' -or $inspect -notmatch 'PASS: Diagnosis:') { throw 'Readiness Inspect is not integrated with observation-derived diagnosis and evidence output.' }
+if ($inspect -match 'readiness_probe_failure|service_selector_mismatch|DiagnosisIdentifier|DiagnosisSummary') { throw 'Readiness Inspect still selects a diagnosis identifier or summary.' }
+$inject = Get-Content -Raw -LiteralPath (Join-Path $scenarioRoot 'Inject.ps1')
+$repair = Get-Content -Raw -LiteralPath (Join-Path $scenarioRoot 'Repair.ps1')
+if ($inject -notmatch 'patch deployment' -or $inject -notmatch '/platform-breakfix-readiness-failure' -or $inject -match 'patch service') { throw 'Readiness injection is no longer limited to the readiness path.' }
+if ($repair -notmatch 'patch deployment' -or $repair -notmatch '"path":"/"' -or $repair -match 'patch service') { throw 'Readiness repair is no longer limited to the healthy readiness path.' }
+Write-Host 'PASS: Readiness Inspect delegates diagnosis and injection/repair semantics remain unchanged.' -ForegroundColor Green
 Write-Host 'PASS: Readiness scenario deterministic tests completed without Kubernetes or Azure access.' -ForegroundColor Green

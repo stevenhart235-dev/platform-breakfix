@@ -1,7 +1,9 @@
 [CmdletBinding()] param()
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Scenario-Kubernetes.ps1')
-. (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'scripts/ScenarioEvidence.ps1')
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+. (Join-Path $repositoryRoot 'scripts/ScenarioEvidence.ps1')
+. (Join-Path $repositoryRoot 'scripts/ScenarioDiagnosis.ps1')
 $destination = Get-ScenarioCurrentDestinationEvidence -ExpectedProbePath $script:ScenarioBrokenProbePath
 $selector = Get-ScenarioServiceSelector
 $readyEndpoints = Get-ScenarioReadyEndpointCount
@@ -21,13 +23,10 @@ Write-Host "  Ready endpoints:      $readyEndpoints"
 Write-Host "  DNS exit/result:      $($dns.ExitCode) / $($dns.Output)"
 Write-Host "  HTTP exit/result:     $($http.ExitCode) / $($http.Output)"
 foreach ($event in $events) { Write-Host "  Readiness event:      $event" }
-if ($destination.Phase -ceq 'Running' -and $destination.ContainerRunning -and $destination.Ready -ceq 'False' -and
-    $destination.ProbePath -ceq $script:ScenarioBrokenProbePath -and $selector -ceq $script:ScenarioDestination -and
-    $readyEndpoints -eq 0 -and $dns.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dns.Output) -and
-    $http.ExitCode -ne 0 -and $http.Output -cne '200') {
-    Write-Host 'PASS: Root cause is the injected invalid readiness path; the container is Running, the Pod is NotReady, and the Service selector remains correct.' -ForegroundColor Green
-    $httpStatus = if ($http.Output -match '^[1-5][0-9]{2}$') { [int]$http.Output } else { $null }
-    $evidence = New-ScenarioEvidenceDocument -Scenario 'readiness-probe-failure' -Provider 'aks' -Profile 'minimal' -DestinationPodExists $true -Phase ([string]$destination.Phase) -ContainerRunning ([bool]$destination.ContainerRunning) -Ready $false -ReadinessProbePath $destination.ProbePath -DestinationLabel ([string]$destination.Labels.app) -Selector ([string]$selector) -ServiceExists $true -SelectorMatches $true -ReadyEndpointCount ([int]$readyEndpoints) -DnsSuccess $true -HttpSuccess $false -HttpStatus $httpStatus -DiagnosisIdentifier 'readiness_probe_failure' -DiagnosisSummary 'The injected readiness probe path keeps the Running destination container NotReady while the Service selector still matches.'
-    $artifact = Write-ScenarioEvidence -Evidence $evidence -RepositoryRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-    Write-Host "  Structured evidence:  $artifact"
-} else { Stop-ScenarioValidation 'Inspection evidence does not uniquely identify the expected readiness probe failure.' }
+$httpStatus = if ($http.Output -match '^[1-5][0-9]{2}$') { [int]$http.Output } else { $null }
+$observations = New-ScenarioObservations -DestinationPodExists $true -Phase ([string]$destination.Phase) -ContainerRunning ([bool]$destination.ContainerRunning) -Ready ($destination.Ready -ceq 'True') -ReadinessProbePath $destination.ProbePath -DestinationLabel ([string]$destination.Labels.app) -ServiceExists $true -Selector ([string]$selector) -SelectorMatches ($selector -ceq [string]$destination.Labels.app) -ReadyEndpointCount ([int]$readyEndpoints) -DnsSuccess ($dns.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dns.Output)) -HttpSuccess ($http.ExitCode -eq 0 -and $http.Output -ceq '200') -HttpStatus $httpStatus
+$diagnosis = Resolve-ScenarioDiagnosis -Observations $observations
+$evidence = New-ScenarioEvidenceDocument -Scenario 'readiness-probe-failure' -Provider 'aks' -Profile 'minimal' -Observations $observations -Diagnosis $diagnosis
+$artifact = Write-ScenarioEvidence -Evidence $evidence -RepositoryRoot $repositoryRoot
+Write-Host "PASS: Diagnosis: $($diagnosis.Identifier) — $($diagnosis.Summary)" -ForegroundColor Green
+Write-Host "  Structured evidence:  $artifact"

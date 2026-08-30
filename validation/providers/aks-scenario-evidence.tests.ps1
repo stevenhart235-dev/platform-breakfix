@@ -2,10 +2,13 @@
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $RepositoryRoot 'scripts/ScenarioEvidence.ps1')
+. (Join-Path $RepositoryRoot 'scripts/ScenarioDiagnosis.ps1')
 
 function New-TestEvidence {
-    param([string]$Scenario, [bool]$Ready, [string]$ProbePath, [string]$Selector, [bool]$SelectorMatches, [string]$Diagnosis)
-    New-ScenarioEvidenceDocument -Scenario $Scenario -Provider 'aks' -Profile 'minimal' -DestinationPodExists $true -Phase 'Running' -ContainerRunning $true -Ready $Ready -ReadinessProbePath $ProbePath -DestinationLabel 'scenario-destination' -ServiceExists $true -Selector $Selector -SelectorMatches $SelectorMatches -ReadyEndpointCount 0 -DnsSuccess $true -HttpSuccess $false -HttpStatus $null -DiagnosisIdentifier $Diagnosis -DiagnosisSummary "Deterministic test diagnosis for $Scenario." -Timestamp ([datetimeoffset]'2026-08-30T12:00:00Z')
+    param([string]$Scenario, [bool]$Ready, [string]$ProbePath, [string]$Selector, [bool]$SelectorMatches)
+    $observations = New-ScenarioObservations -DestinationPodExists $true -Phase 'Running' -ContainerRunning $true -Ready $Ready -ReadinessProbePath $ProbePath -DestinationLabel 'scenario-destination' -ServiceExists $true -Selector $Selector -SelectorMatches $SelectorMatches -ReadyEndpointCount 0 -DnsSuccess $true -HttpSuccess $false -HttpStatus $null
+    $diagnosis = Resolve-ScenarioDiagnosis -Observations $observations
+    New-ScenarioEvidenceDocument -Scenario $Scenario -Provider 'aks' -Profile 'minimal' -Observations $observations -Diagnosis $diagnosis -Timestamp ([datetimeoffset]'2026-08-30T12:00:00Z')
 }
 
 function Assert-Throws([string]$Name, [scriptblock]$Action) {
@@ -13,8 +16,8 @@ function Assert-Throws([string]$Name, [scriptblock]$Action) {
     throw "$Name unexpectedly succeeded."
 }
 
-$readiness = New-TestEvidence readiness-probe-failure $false '/platform-breakfix-readiness-failure' 'scenario-destination' $true readiness_probe_failure
-$selector = New-TestEvidence service-selector-mismatch $true '/' 'scenario-destination-missing' $false service_selector_mismatch
+$readiness = New-TestEvidence readiness-probe-failure $false '/platform-breakfix-readiness-failure' 'scenario-destination' $true
+$selector = New-TestEvidence service-selector-mismatch $true '/' 'scenario-destination-missing' $false
 Assert-ScenarioEvidenceContract $readiness | Out-Null
 Assert-ScenarioEvidenceContract $selector | Out-Null
 Write-Host 'PASS: Both canonical scenarios satisfy evidence contract version 1.' -ForegroundColor Green
@@ -79,14 +82,9 @@ if ($readiness.Observations.Workload.Ready -or -not $readiness.Observations.Serv
 if (-not $selector.Observations.Workload.Ready -or $selector.Observations.Service.SelectorMatchesDestinationLabel -or $selector.Diagnosis.Identifier -cne 'service_selector_mismatch') { throw 'Selector diagnostic facts are incorrect.' }
 Write-Host 'PASS: Same external symptoms remain distinguishable by readiness, selector alignment, and stable diagnosis.' -ForegroundColor Green
 
-$inspectExpectations = @{
-    'readiness-probe-failure' = @("-Ready `$false", "-SelectorMatches `$true", "-DiagnosisIdentifier 'readiness_probe_failure'")
-    'service-selector-mismatch' = @("-Ready `$true", "-SelectorMatches `$false", "-DiagnosisIdentifier 'service_selector_mismatch'")
-}
-foreach ($scenario in $inspectExpectations.Keys) {
+foreach ($scenario in @('readiness-probe-failure','service-selector-mismatch')) {
     $inspect = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot "scenarios/$scenario/Inspect.ps1")
-    if ($inspect -notmatch 'Write-ScenarioEvidence' -or $inspect -notmatch 'Structured evidence:') { throw "$scenario Inspect does not preserve human output and add structured evidence." }
-    foreach ($expected in $inspectExpectations[$scenario]) { if (-not $inspect.Contains($expected)) { throw "$scenario Inspect is missing production evidence fact: $expected" } }
-}
-Write-Host 'PASS: Both Inspect hooks retain human output and emit through the generic helper.' -ForegroundColor Green
+    if ($inspect -notmatch 'New-ScenarioObservations' -or $inspect -notmatch 'Resolve-ScenarioDiagnosis' -or $inspect -notmatch 'Write-ScenarioEvidence' -or $inspect -notmatch 'PASS: Diagnosis:') { throw "$scenario Inspect does not collect observations, derive diagnosis, preserve human output, and emit evidence." }
+    if ($inspect -match 'readiness_probe_failure|service_selector_mismatch|DiagnosisIdentifier|DiagnosisSummary') { throw "$scenario Inspect still selects a diagnosis." }
+}Write-Host 'PASS: Both Inspect hooks retain human output and emit through the generic helper.' -ForegroundColor Green
 Write-Host 'PASS: Scenario evidence contract tests completed without Kubernetes or Azure access.' -ForegroundColor Green
