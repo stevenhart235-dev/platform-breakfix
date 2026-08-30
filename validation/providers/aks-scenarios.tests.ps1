@@ -23,11 +23,16 @@ $productionRoot = Join-Path $RepositoryRoot 'scenarios'
 $known = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName bad-service-selector -ScenariosRoot $productionRoot
 if ($known.Name -cne 'bad-service-selector' -or $known.Provider -cne 'aks' -or $known.Profile -cne 'minimal' -or $known.Hooks.Count -ne 6) { throw 'Known scenario did not normalize correctly.' }
 Write-Host 'PASS: Known scenario resolves with all explicit hooks.' -ForegroundColor Green
+$readiness = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot
+if ($readiness.Name -cne 'readiness-probe-failure' -or $readiness.Provider -cne 'aks' -or $readiness.Profile -cne 'minimal' -or $readiness.Hooks.Count -ne 6) { throw 'Readiness scenario did not normalize correctly.' }
+Write-Host 'PASS: Readiness scenario resolves with the unchanged six-hook schema.' -ForegroundColor Green
 $none = Resolve-LabScenario -Provider aks -ProfileName minimal -ScenarioName '' -ScenariosRoot $productionRoot
 if (-not $none.IsNone -or $none.Name -cne 'none') { throw 'Omitted scenario did not resolve as none.' }
 Write-Host 'PASS: Omitted scenario resolves as none.' -ForegroundColor Green
 Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName cilium -ScenarioName bad-service-selector -ScenariosRoot $productionRoot } 'does not support profile' 'Cilium compatibility fails closed.'
 Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName istio -ScenarioName bad-service-selector -ScenariosRoot $productionRoot } 'does not support profile' 'Istio compatibility fails closed.'
+Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName cilium -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot } 'does not support profile' 'Readiness scenario rejects Cilium.'
+Assert-ThrowsLike { Resolve-LabScenario -Provider aks -ProfileName istio -ScenarioName readiness-probe-failure -ScenariosRoot $productionRoot } 'does not support profile' 'Readiness scenario rejects Istio.'
 
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "platform-breakfix-scenario-tests-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $testRoot | Out-Null
@@ -54,6 +59,11 @@ try {
     Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario bad-service-selector } 'Saved plan scenario mismatch' 'Scenario-none plan cannot provision as named scenario.'
     Set-Content $metadata '{"Profile":"minimal","Scenario":"first","PlanSha256":"test"}'
     Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario second } 'Saved plan scenario mismatch' 'One named scenario cannot silently become another.'
+    Set-Content $metadata '{"Profile":"minimal","Scenario":"readiness-probe-failure","PlanSha256":"test"}'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario none } 'Saved plan scenario mismatch' 'Readiness plan cannot provision as scenario none.'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario bad-service-selector } 'Saved plan scenario mismatch' 'Readiness plan cannot provision as bad-service-selector.'
+    Set-Content $metadata '{"Profile":"minimal","Scenario":"bad-service-selector","PlanSha256":"test"}'
+    Assert-ThrowsLike { Assert-AksSavedPlanScenario -MetadataPath $metadata -RequestedScenario readiness-probe-failure } 'Saved plan scenario mismatch' 'Selector plan cannot provision as readiness-probe-failure.'
     $liveStatus = [pscustomobject]@{ State='ACTIVE'; Profile='cilium'; ResourceGroup='rg-test' }
     Assert-ThrowsLike { Assert-AksLiveLabProfile -Status $liveStatus -RequestedProfile minimal } 'Live AKS lab profile mismatch' 'Existing profile mismatch protection remains intact.'
 } finally { if (Test-Path $testRoot) { Remove-Item $testRoot -Recurse -Force } }
