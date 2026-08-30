@@ -83,6 +83,8 @@ destroy_lab           verify_clean
 
 CLI commands, HTTP resources, and MCP tools are transport adapters over this one capability contract. They must not become independent contracts or add application-platform operations. Mutation must remain explicit, fail closed, preserve saved-plan/profile/scenario binding, prioritize cleanup, and never be silently authorized by a read-only transport call.
 
+Breakfix Operations v1 exposes the read-only subset `list_profiles`, `list_scenarios`, `read_evidence`, `diagnose_evidence`, and `get_lab_status`. The evidence operations read an existing bounded local artifact and diagnose it offline; they do not collect fresh cluster evidence. The CLI is the first adapter. Future HTTP and MCP adapters must preserve these operation semantics and delegate to the same operation layer.
+
 ## Future extension rules
 
 - Add a capability only when it serves deterministic ephemeral lab behavior.
