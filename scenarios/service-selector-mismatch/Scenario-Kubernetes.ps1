@@ -68,9 +68,11 @@ function ConvertTo-ScenarioDestinationEvidence {
     foreach ($section in @('metadata', 'spec', 'status')) {
         if (-not (Test-ScenarioObjectProperty $Pod $section) -or $null -eq $Pod.$section) { Stop-ScenarioValidation "Destination Pod is missing required '$section' state." }
     }
+    $containerSpec = @($Pod.spec.containers | Where-Object { $_.name -ceq 'destination' })
     $container = @($Pod.status.containerStatuses | Where-Object { $_.name -ceq 'destination' })
     $ready = @($Pod.status.conditions | Where-Object { $_.type -ceq 'Ready' })
-    if ($container.Count -ne 1 -or $ready.Count -ne 1) { Stop-ScenarioValidation 'Destination Pod is missing its container or Ready condition state.' }
+    if ($containerSpec.Count -ne 1 -or $container.Count -ne 1 -or $ready.Count -ne 1) { Stop-ScenarioValidation 'Destination Pod is missing its container or Ready condition state.' }
+    if (-not (Test-ScenarioObjectProperty $containerSpec[0] 'readinessProbe') -or $null -eq $containerSpec[0].readinessProbe.httpGet.path) { Stop-ScenarioValidation 'Destination Pod has no HTTP readiness probe path.' }
     [pscustomobject]@{
         Name = [string]$Pod.metadata.name
         Created = [datetimeoffset]$Pod.metadata.creationTimestamp
@@ -78,6 +80,7 @@ function ConvertTo-ScenarioDestinationEvidence {
         ContainerRunning = $null -ne $container[0].state.running
         Ready = [string]$ready[0].status
         AppLabel = [string]$Pod.metadata.labels.app
+        ProbePath = [string]$containerSpec[0].readinessProbe.httpGet.path
     }
 }
 

@@ -10,7 +10,7 @@ function New-TestDestinationPod {
     if ($Deleting) { $metadata.deletionTimestamp = '2026-08-30T12:01:00Z' }
     [pscustomobject]@{
         metadata=[pscustomobject]$metadata
-        spec=[pscustomobject]@{ containers=@([pscustomobject]@{ name='destination' }) }
+        spec=[pscustomobject]@{ containers=@([pscustomobject]@{ name='destination'; readinessProbe=[pscustomobject]@{ httpGet=[pscustomobject]@{ path='/' } } }) }
         status=[pscustomobject]@{
             phase='Running'
             conditions=@([pscustomobject]@{ type='Ready'; status=$Ready })
@@ -26,7 +26,7 @@ function Assert-Throws([string]$Name, [scriptblock]$Action) {
 
 $healthy = New-TestDestinationPod healthy '2026-08-30T12:02:00Z'
 $evidence = Select-ScenarioCurrentDestinationEvidence ([pscustomobject]@{ items=@($healthy) })
-if ($evidence.Phase -cne 'Running' -or -not $evidence.ContainerRunning -or $evidence.Ready -cne 'True' -or $evidence.AppLabel -cne 'scenario-destination') { throw 'Healthy destination evidence was interpreted incorrectly.' }
+if ($evidence.Phase -cne 'Running' -or -not $evidence.ContainerRunning -or $evidence.Ready -cne 'True' -or $evidence.AppLabel -cne 'scenario-destination' -or $evidence.ProbePath -cne '/') { throw 'Healthy destination evidence was interpreted incorrectly.' }
 Write-Host 'PASS: Destination remains Running and Ready=True with its original label.' -ForegroundColor Green
 
 if (-not (Test-ScenarioSelectorMatchesDestination 'scenario-destination' $evidence.AppLabel)) { throw 'Healthy selector did not match the destination label.' }
