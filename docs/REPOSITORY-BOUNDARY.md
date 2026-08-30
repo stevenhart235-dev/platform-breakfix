@@ -1,0 +1,93 @@
+# Repository boundary
+
+This document is the canonical architectural fence for `platform-breakfix`. It governs future extraction and any CLI, HTTP API, or MCP design.
+
+## Purpose and dependency direction
+
+`platform-breakfix` is an ephemeral infrastructure proving ground and a deterministic break/fix lab. It validates provider, profile, lifecycle, and scenario behavior. It may prove reusable cluster-foundation primitives, but it is not an application-platform control plane.
+
+The required long-term dependency direction is:
+
+```text
+                    cluster-foundation
+                      ^           ^
+                      |           |
+             platform-breakfix   future-platform
+```
+
+`cluster-foundation` is the single owner of reusable cluster and diagnostic primitives. `platform-breakfix` consumes them to run deterministic labs. A future platform consumes them to compose and reconcile application-platform capabilities. The future platform must never depend on `platform-breakfix`, and reusable implementation must not be copied between repositories.
+
+## Ownership matrix
+
+| Domain | Owns | May consume | Must not own |
+| --- | --- | --- | --- |
+| `platform-breakfix` | Ephemeral lab semantics; break/fix orchestration; scenario catalog and compatibility; expected-failure behavior; scenario injection, repair, and observation gathering; acceptance tests and milestone evidence; lab-oriented operator interface. | Provider provisioning, profiles/addons, guardrails, validation/preflight, generic scenario execution, evidence, and diagnosis primitives from foundation. | Application-platform reconciliation or application lifecycle. |
+| Future `cluster-foundation` | Provider-native AKS/EKS create and teardown; reusable profile/addon mechanisms; lifecycle, TTL, plan-binding, and cleanup guardrails; reusable preflight/validation; generic scenario execution; evidence schema/serialization; generic diagnosis execution. | Cloud/provider SDKs and provider-native infrastructure implementations. | Scenario catalog, application-platform composition, or a universal cross-cloud Terraform implementation. |
+| Future platform repository | Cloudflare, identity, platform networking/policy, Ceph, Kafka, databases, GitOps, observability, application contracts, onboarding, self-service, promotion, application lifecycle, placement, and platform reconciliation. | Proven foundation capabilities through stable contracts. | Foundation implementation copied from another consumer, or dependencies through `platform-breakfix`. |
+
+Provider-specific behavior remains visible. Put a stable capability contract above independently understandable `providers/aks` and `providers/eks` implementations; do not replace them with one universal implementation. Do not introduce `UniversalCloudClusterFactory`, `GenericInfrastructureProvider`, `MultiCloudPlacementEngine`, `PlatformCapabilityReconciler`, or an equivalent giant abstraction without a concrete existing requirement.
+
+## Hard exclusions from platform-breakfix
+
+The following responsibilities and placeholders are forbidden:
+
+- `ApplicationBlueprint` or application-blueprint abstractions
+- application contracts, onboarding, or dependency resolution
+- developer self-service or developer portals
+- platform capability or application reconciliation
+- multi-cloud workload placement or cross-provider workload scheduling
+- application deployment lifecycle, rollout, or environment promotion
+- application database or Kafka provisioning
+- Ceph application-storage orchestration
+- Cloudflare application-routing orchestration
+- application identity lifecycle
+- GitOps application management
+- platform product catalogs
+- application control-plane state
+- tenant or application ownership models
+
+## Similar names, different abstractions
+
+A **breakfix profile** is a tested cluster configuration appropriate for a deterministic lab, such as `minimal`, `cilium`, or `istio`. It is not a future platform application contract describing capabilities that a control plane must reconcile. The lab taxonomy must not become a platform API accidentally.
+
+A **breakfix scenario** injects, observes, diagnoses, and repairs a bounded condition in a lab. It is not an application deployment, rollout, promotion, reconciliation, or lifecycle operation.
+
+## Extraction principles
+
+1. Give each reusable implementation one canonical owner.
+2. Make `platform-breakfix` consume that implementation without copying it.
+3. Preserve existing breakfix regressions and provider behavior.
+4. Keep AKS and EKS implementations independently understandable beneath stable outcome contracts.
+5. Extract leaf contracts before lifecycle orchestrators that depend on them.
+6. Keep the breakfix scenario catalog, expected-failure semantics, and milestone evidence in `platform-breakfix`.
+7. Extraction is incomplete while copy-and-diverge implementations remain or while a future platform must reach through `platform-breakfix`.
+
+Profile schema/parsing and addon installation mechanisms may move to foundation. Exact lab profiles remain breakfix-owned unless they are promoted deliberately as reusable tested cluster configurations. Reusable addon mechanisms may move; synthetic lab workloads and acceptance assertions do not.
+
+Generic scenario resolution, hook execution, and cleanup/finally behavior may move to foundation after fixed lab workload names and provider entry points are removed from the generic primitive. Scenario definitions remain here.
+
+Evidence shape, validation, serialization, and artifact I/O are shared-contract candidates. A generic exactly-one diagnosis executor may move to foundation; the current rules for the two breakfix scenarios remain with the breakfix catalog unless another consumer adopts the same diagnostic contract.
+
+## Breakfix capability interface
+
+The transport-neutral breakfix contract is limited to:
+
+```text
+create_lab            get_lab_status       inspect_lab
+list_profiles         list_scenarios       run_scenario
+collect_evidence      diagnose             validate_lab
+destroy_lab           verify_clean
+```
+
+`create_lab`, `run_scenario`, and `destroy_lab` mutate durable lab state. `validate_lab` is logically validation but currently creates and removes temporary Kubernetes storage-test resources, so it must be treated as a bounded mutation. Status, inspection, listing, evidence collection, diagnosis, and cleanup verification are read-only with respect to cloud/Kubernetes state; evidence collection may overwrite its ignored local artifact.
+
+CLI commands, HTTP resources, and MCP tools are transport adapters over this one capability contract. They must not become independent contracts or add application-platform operations. Mutation must remain explicit, fail closed, preserve saved-plan/profile/scenario binding, prioritize cleanup, and never be silently authorized by a read-only transport call.
+
+## Future extension rules
+
+- Add a capability only when it serves deterministic ephemeral lab behavior.
+- Keep read-only operations separable from mutating operations and surface mutations only after authorization, idempotency, and cleanup semantics exist.
+- Add provider adapters rather than cloud conditionals inside a universal infrastructure implementation.
+- Promote reusable code only with a consuming `platform-breakfix` integration and regression parity; do not copy it speculatively.
+- Reject application-platform vocabulary and placeholders at review time.
+- Update this boundary document before approving a change that alters repository ownership or dependency direction.
