@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lab-health-dashboard
+  namespace: platform-breakfix-dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: lab-health-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

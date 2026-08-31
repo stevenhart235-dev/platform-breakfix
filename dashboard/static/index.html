@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AKS Lab Health</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header><p class="eyebrow">platform-breakfix</p><h1>AKS Lab Health</h1><p>Passive presentation of Lab Health Contract v1.</p></header>
+  <main>
+    <section class="overview" aria-labelledby="overview-title"><h2 id="overview-title">Current observation</h2><strong id="overall-status" class="overall">{{OVERALL}}</strong><p id="observed-at">Observed: {{OBSERVED_AT}}</p><p id="availability" class="{{BANNER_CLASS}}" role="alert">{{BANNER_TEXT}}</p></section>
+    <section aria-labelledby="components-title"><h2 id="components-title">Components</h2><div class="grid" id="components">{{COMPONENTS}}</div></section>
+    <aside><h2>Scope</h2><p>This dashboard displays passive cluster-health observations. It does not diagnose scenarios, mutate workloads, or represent active DNS and storage validation. DNS and storage remain part of lifecycle validation.</p></aside>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

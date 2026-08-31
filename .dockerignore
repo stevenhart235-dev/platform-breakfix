@@ -1,0 +1,9 @@
+.git
+.runtime
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.tfplan.*
+**/kubeconfig*
+**/.tofu-*
