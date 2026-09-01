@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 
 $script:AksRepositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
-. (Join-Path $script:AksRepositoryRoot 'foundation/DeterministicSelection.ps1')
+. (Join-Path $script:AksRepositoryRoot 'external/cluster-foundation/src/DeterministicSelection.ps1')
 
 $script:AksDefaults = @{
     SubscriptionId        = '0071dee8-974f-4f93-ad2a-0960557e1888'

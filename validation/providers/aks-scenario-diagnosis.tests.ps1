@@ -75,7 +75,7 @@ try {
 Write-Host 'PASS: both derived diagnoses survive Evidence Contract v1 artifact write/read.' -ForegroundColor Green
 $engineSource = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'scripts/ScenarioDiagnosis.ps1')
 if ($engineSource -match '(?i)kubectl|kubeconfig|\baz\b|Azure|Invoke-Scenario|patch|repair|ScenarioName|\.Scenario\b|confidence|probab|fuzzy|heuristic|ranking') { throw 'Diagnosis engine crosses a prohibited architecture boundary or uses scenario identity/probabilistic behavior.' }
-$foundationSource = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'foundation/DeterministicSelection.ps1')
+$foundationSource = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'external/cluster-foundation/src/DeterministicSelection.ps1')
 if ($engineSource -notmatch 'Resolve-DeterministicSelection' -or $engineSource -match 'Matches\.Count -ne 1|Assert-SingleScenarioDiagnosisMatch') { throw 'Scenario diagnosis does not delegate exclusively to the foundation selection primitive.' }
 if ($foundationSource -notmatch 'matches\.Count -ne 1') { throw 'Foundation primitive lacks the canonical exactly-one-match guard.' }
 Write-Host 'PASS: diagnosis rules delegate deterministic exactly-one selection to the sole foundation implementation.' -ForegroundColor Green

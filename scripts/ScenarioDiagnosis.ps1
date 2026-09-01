@@ -1,5 +1,5 @@
 Set-StrictMode -Version Latest
-. (Join-Path (Split-Path -Parent $PSScriptRoot) 'foundation/DeterministicSelection.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'external/cluster-foundation/src/DeterministicSelection.ps1')
 
 function Test-ReadinessProbeFailureObservations {
     param([Parameter(Mandatory)] $Observations)

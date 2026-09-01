@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $providerPath = Join-Path $RepositoryRoot 'providers/azure/aks/scripts/Lab-Aks.ps1'
-$foundationPath = Join-Path $RepositoryRoot 'foundation/DeterministicSelection.ps1'
+$foundationPath = Join-Path $RepositoryRoot 'external/cluster-foundation/src/DeterministicSelection.ps1'
 . $providerPath
 
 function New-Revision([string]$Revision,[string[]]$Versions,[string]$Marker) {
@@ -35,8 +35,8 @@ Assert-True ($providerSource -match '(?s)if \(\$Profile\.InfrastructureInputs\.S
 Assert-True ($providerSource -match 'Resolve-DeterministicSelection -Candidates' -and $diagnosisSource -match 'Resolve-DeterministicSelection -Candidates') 'Foundation does not have both active consumers.'
 Assert-True ($providerSource -notmatch 'ScenarioDiagnosis|Resolve-ScenarioDiagnosis' -and $diagnosisSource -notmatch 'Lab-Aks|Resolve-AksManagedIstioRevision') 'The two consumers depend on one another.'
 Assert-True ($foundationSource -notmatch 'ScenarioDiagnosis|Lab-Aks|Resolve-AksManagedIstioRevision') 'Foundation depends on a consumer.'
-$selectionGuards=@(rg -l --glob '*.ps1' '\$matches\.Count -ne 1' (Join-Path $RepositoryRoot 'foundation') (Join-Path $RepositoryRoot 'scripts') (Join-Path $RepositoryRoot 'providers'))
-Assert-True ($selectionGuards.Count -eq 1 -and $selectionGuards[0] -match 'foundation[\\/]DeterministicSelection\.ps1$') 'Generic exactly-one mechanics are duplicated outside foundation.'
+$selectionGuards=@(rg -l --glob '*.ps1' '\$matches\.Count -ne 1' (Join-Path $RepositoryRoot 'external/cluster-foundation/src') (Join-Path $RepositoryRoot 'scripts') (Join-Path $RepositoryRoot 'providers'))
+Assert-True ($selectionGuards.Count -eq 1 -and $selectionGuards[0] -match 'external[\\/]cluster-foundation[\\/]src[\\/]DeterministicSelection\.ps1$') 'Generic exactly-one mechanics are duplicated outside foundation.'
 $helperText=[regex]::Match($providerSource,'(?s)function Resolve-AksManagedIstioRevision \{.*?\n\}').Value
 Assert-True ($helperText -match '\.revision -ceq \$RequestedRevision' -and $helperText -notmatch '\$selected\.Count -ne 1|Select-Object -First') 'Provider matching predicate or exact-one delegation changed.'
 Assert-True ($providerSource -match '(?s)Resolve-AksManagedIstioRevision.*?Write-Host "PASS: Managed Istio revision') 'Doctor no longer continues accepted Istio behavior after selection.'

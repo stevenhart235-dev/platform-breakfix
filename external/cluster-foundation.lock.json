@@ -1,0 +1,11 @@
+{
+  "SchemaVersion": 1,
+  "Name": "cluster-foundation",
+  "RepositoryUrl": "https://github.com/stevenhart235-dev/cluster-foundation.git",
+  "Version": "0.1.0",
+  "Tag": "v0.1.0",
+  "CommitSha": "06509854104d8b0289790a6ec3b3bd9053761522",
+  "SourcePath": "src/DeterministicSelection.ps1",
+  "SourceSha256": "F03C4401552FB6F9F9BE65DB813127B8ECF020A1089A8889064F95C4A0B4D866",
+  "ContractMajorVersion": 0
+}

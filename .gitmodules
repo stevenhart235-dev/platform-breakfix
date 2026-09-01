@@ -1,0 +1,3 @@
+[submodule "external/cluster-foundation"]
+	path = external/cluster-foundation
+	url = https://github.com/stevenhart235-dev/cluster-foundation.git
