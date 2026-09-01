@@ -2,10 +2,12 @@
   "SchemaVersion": 1,
   "Name": "cluster-foundation",
   "RepositoryUrl": "https://github.com/stevenhart235-dev/cluster-foundation.git",
-  "Version": "0.1.0",
-  "Tag": "v0.1.0",
-  "CommitSha": "06509854104d8b0289790a6ec3b3bd9053761522",
+  "Version": "0.2.0",
+  "Tag": "v0.2.0",
+  "CommitSha": "d042fa4e9a3b8ef975554fa56b7c9a4b61547e54",
   "SourcePath": "src/DeterministicSelection.ps1",
   "SourceSha256": "F03C4401552FB6F9F9BE65DB813127B8ECF020A1089A8889064F95C4A0B4D866",
+  "LifecycleStatusSourcePath": "src/LifecycleStatus.ps1",
+  "LifecycleStatusSourceSha256": "F324164D951F16D0EEC6ED871DB4BFA787D12D8C392D1A88E22F0047ED43D85B",
   "ContractMajorVersion": 0
 }

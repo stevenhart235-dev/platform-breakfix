@@ -74,13 +74,16 @@ try{
   @{Native=[pscustomobject]@{State='NO LAB'};Expected='NO_LAB'},
   @{Native=[pscustomobject]@{State='ACTIVE';Profile='minimal';CreatedAt=[datetimeoffset]'2026-01-01T00:00:00Z';ExpiresAt=[datetimeoffset]'2026-01-01T04:00:00Z'};Expected='ACTIVE'},
   @{Native=[pscustomobject]@{State='STALE';Profile='cilium';CreatedAt='2026-01-01T00:00:00Z';ExpiresAt='2026-01-01T04:00:00Z'};Expected='STALE'},
-  @{Native=[pscustomobject]@{State='EXISTING INVALID'};Expected='UNKNOWN'}
+  @{Native=[pscustomobject]@{State='EXISTING INVALID'};Expected='UNKNOWN'},
+  @{Native=[pscustomobject]@{State='ACTIVE';CreatedAt='invalid';ExpiresAt='2026-01-01T04:00:00Z'};Expected='UNKNOWN'}
  )){
   $script:statusFixture=$fixture.Native;$script:BreakfixStatusReaders.aks={param($Root)$script:statusFixture}
   $status=Invoke-BreakfixOperation get_lab_status @{Provider='aks'}
   Assert-True ($status.Success -and $status.Data.State -ceq $fixture.Expected) "Status $($fixture.Expected) failed."
   Assert-True ($status.Data.ConnectionState -ceq 'UNKNOWN') 'Connection state mutated.'
  }
+ $script:BreakfixStatusReaders.aks={param($Root)[pscustomobject]@{Profile='minimal'}}
+ $malformed=Invoke-BreakfixOperation get_lab_status @{Provider='aks'};Assert-Error $malformed LAB_STATE_UNAVAILABLE
  $script:BreakfixStatusReaders.aks={param($Root)throw 'C:\secret\provider failure'}
  $unavailable=Invoke-BreakfixOperation get_lab_status @{Provider='aks'};Assert-Error $unavailable LAB_STATE_UNAVAILABLE
  Assert-True ($unavailable.Error.Message -notmatch 'secret|C:\\') 'Provider details leaked.'
@@ -90,6 +93,7 @@ Assert-Error (Invoke-BreakfixOperation get_lab_status @{}) INVALID_ARGUMENT
 Assert-Error (Invoke-BreakfixOperation list_profiles @{Provider=''}) INVALID_ARGUMENT
 $source=Get-Content -Raw (Join-Path $repositoryRoot 'scripts/BreakfixOperations.ps1')
 Assert-True ($source -match 'Read-ScenarioEvidence' -and $source -match 'Resolve-ScenarioDiagnosis') 'Evidence or diagnosis does not delegate to accepted primitives.'
+Assert-True ($source -match 'external/cluster-foundation/src/LifecycleStatus.ps1' -and $source -match 'Resolve-LifecycleStatus' -and $source -notmatch 'ConvertTo-BreakfixTimestamp') 'Lifecycle status does not exclusively delegate to foundation.'
 foreach($term in @('Test-ReadinessProbeFailureObservations','Test-ServiceSelectorMismatchObservations',"'minimal'","'cilium'","'istio'")){Assert-True ($source -notmatch [regex]::Escape($term)) "Operation layer duplicates catalog or diagnosis logic: $term"}
 foreach($term in @('get-credentials','update-kubeconfig','tofu apply','tofu destroy','kubectl apply','kubectl delete')){Assert-True ($source -notmatch [regex]::Escape($term)) "Mutation found: $term"}
 Write-Host 'PASS: Breakfix Operations v1 contract tests.' -ForegroundColor Green

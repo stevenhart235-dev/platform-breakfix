@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 
 $script:BreakfixRepositoryRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $script:BreakfixRepositoryRoot 'external/cluster-foundation/src/LifecycleStatus.ps1')
 $script:BreakfixOperationContractVersion = 1
 $script:BreakfixOperationSets = @{
     1 = @('list_profiles', 'list_scenarios', 'read_evidence', 'diagnose_evidence', 'get_lab_status')
@@ -180,13 +181,6 @@ $script:BreakfixHealthReaders = @{
     }
 }
 
-function ConvertTo-BreakfixTimestamp {
-    param($Value)
-    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
-    try { ([datetimeoffset]$Value).ToUniversalTime().ToString('o') }
-    catch { return $null }
-}
-
 function Get-BreakfixLabStatus {
     param([Parameter(Mandatory)][string] $RepositoryRoot, [Parameter(Mandatory)][string] $Provider)
     if ($Provider -cne 'aks') {
@@ -197,17 +191,23 @@ function Get-BreakfixLabStatus {
     if ($null -eq $native -or -not ($native.psobject.Properties.Name -contains 'State')) {
         throw (New-BreakfixOperationException 'LAB_STATE_UNAVAILABLE' "Lab status is currently unavailable for provider '$Provider'.")
     }
-    $state = if ([string]$native.State -cin @('NO LAB', 'NO_LAB')) { 'NO_LAB' } elseif ([string]$native.State -cin @('ACTIVE', 'STALE')) { [string]$native.State } else { 'UNKNOWN' }
+
+    $neutralState = if ([string]$native.State -cin @('NO LAB', 'NO_LAB')) { 'NO_LAB' } elseif ([string]$native.State -cin @('ACTIVE', 'STALE')) { [string]$native.State } else { 'INDETERMINATE' }
+    $observation = [pscustomobject][ordered]@{
+        State = $neutralState
+        CreatedAt = if ($native.psobject.Properties.Name -contains 'CreatedAt' -and $null -ne $native.CreatedAt) { [string]$native.CreatedAt } else { $null }
+        ExpiresAt = if ($native.psobject.Properties.Name -contains 'ExpiresAt' -and $null -ne $native.ExpiresAt) { [string]$native.ExpiresAt } else { $null }
+    }
+    try { $normalized = Resolve-LifecycleStatus -Observation $observation }
+    catch { throw (New-BreakfixOperationException 'LAB_STATE_UNAVAILABLE' "Lab status is currently unavailable for provider '$Provider'.") }
+
     $profile = if ($native.psobject.Properties.Name -contains 'Profile' -and -not [string]::IsNullOrWhiteSpace([string]$native.Profile)) { [string]$native.Profile } else { $null }
-    $createdAt = if ($native.psobject.Properties.Name -contains 'CreatedAt') { ConvertTo-BreakfixTimestamp $native.CreatedAt } else { $null }
-    $expiresAt = if ($native.psobject.Properties.Name -contains 'ExpiresAt') { ConvertTo-BreakfixTimestamp $native.ExpiresAt } else { $null }
-    if ($state -cin @('ACTIVE', 'STALE') -and ($null -eq $createdAt -or $null -eq $expiresAt)) { $state = 'UNKNOWN' }
     [pscustomobject][ordered]@{
         Provider = 'aks'
-        State = $state
+        State = $normalized.State
         Profile = $profile
-        CreatedAt = $createdAt
-        ExpiresAt = $expiresAt
+        CreatedAt = $normalized.CreatedAt
+        ExpiresAt = $normalized.ExpiresAt
         ConnectionState = 'UNKNOWN'
     }
 }

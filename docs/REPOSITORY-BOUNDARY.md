@@ -87,6 +87,11 @@ M21 audits the active AKS and EKS lifecycles without changing implementation. Th
 The smallest ready slice is pure lifecycle-status normalization beneath Breakfix Operations. Foundation may validate a bounded provider observation and normalize it to `NO_LAB`, `ACTIVE`, `STALE`, or `UNKNOWN`; it must not collect cloud facts, turn collection failures into successful `UNKNOWN`, or own the Operations envelope. AKS has a real producer/consumer seam. EKS remains unsupported until an AWS-native adapter proves ownership and temporal state; EKS control-plane `ACTIVE` alone is not lab `ACTIVE`.
 
 Connection-context, lifecycle error/result, plan/provision, and destroy/verify-clean remain candidates, not approved extraction. They require decoupling or EKS parity first. AKS zero-leftover verification must not be weakened, preserved ECR ownership must stay explicit, credentials must never enter a shared context, and provider modules/state remain independent. See [AKS-MILESTONE-21.md](AKS-MILESTONE-21.md).
+### Second implemented foundation capability
+
+M22 publishes signed `cluster-foundation` v0.2.0 at commit `d042fa4e9a3b8ef975554fa56b7c9a4b61547e54` and atomically transfers pure lifecycle-status normalization. Foundation now owns strict neutral observation validation and deterministic `NO_LAB`/`ACTIVE`/`STALE`/`UNKNOWN` normalization. AKS retains Azure discovery and native observation interpretation; Breakfix Operations retains provider support, envelopes, errors, result fields, and presentation. EKS status remains unsupported.
+
+The platform pins the v0.2.0 gitlink and lock, verifies both foundation source blobs and the signed tag, and contains no duplicate generic lifecycle-status implementation. This extraction does not authorize connection, plan/provision, lifecycle error, destroy/verify-clean, or orchestration work. Rollback restores the complete v0.1.0 dependency and consumer commit atomically; source copying is forbidden. See [AKS-MILESTONE-22.md](AKS-MILESTONE-22.md).
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:
