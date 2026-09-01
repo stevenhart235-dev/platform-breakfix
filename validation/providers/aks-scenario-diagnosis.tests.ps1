@@ -17,7 +17,8 @@ $selector=New-TestObservations -Ready $true -Path '/' -Selector 'scenario-destin
 $readinessDiagnosis=Assert-Diagnosis 'Exact readiness observation set' $readiness readiness_probe_failure
 $selectorDiagnosis=Assert-Diagnosis 'Exact selector observation set' $selector service_selector_mismatch
 if($readinessDiagnosis.Summary -cne (Resolve-ScenarioDiagnosis $readiness).Summary -or $selectorDiagnosis.Summary -cne (Resolve-ScenarioDiagnosis $selector).Summary){throw 'Diagnosis summary is not deterministic.'}
-Write-Host 'PASS: identifiers and summaries are deterministic.' -ForegroundColor Green
+if ($readinessDiagnosis.Summary -cne 'Destination workload is running but not Ready because the injected readiness probe fails while the Service selector still matches.' -or $selectorDiagnosis.Summary -cne 'Destination workload is running and Ready, but the Service selector does not match the destination workload label.') { throw 'Accepted diagnosis summary changed.' }
+Write-Host 'PASS: identifiers and summaries are deterministic and byte-compatible.' -ForegroundColor Green
 
 $renamedReadiness=New-ScenarioEvidenceDocument -Scenario arbitrary-producer -Provider aks -Profile minimal -Observations $readiness -Diagnosis $readinessDiagnosis
 $renamedSelector=New-ScenarioEvidenceDocument -Scenario another-producer -Provider aks -Profile minimal -Observations $selector -Diagnosis $selectorDiagnosis
@@ -53,8 +54,11 @@ $missing=Copy-TestObservations $readiness; $missing.Workload.psobject.Properties
 Assert-Fails 'Required observation missing' { Resolve-ScenarioDiagnosis $missing }
 $invalid=Copy-TestObservations $readiness; $invalid.Workload.Ready='false'
 Assert-Fails 'Invalid observation type' { Resolve-ScenarioDiagnosis $invalid }
-Assert-Fails 'Zero matching rules' { Assert-SingleScenarioDiagnosisMatch -Matches @() }
-Assert-Fails 'Ambiguous multiple matching rules' { Assert-SingleScenarioDiagnosisMatch -Matches @($readinessDiagnosis,$selectorDiagnosis) }
+Assert-Fails 'Zero matching rules' { Resolve-DeterministicSelection -Candidates @() }
+Assert-Fails 'Ambiguous multiple matching rules' { Resolve-DeterministicSelection -Candidates @(
+    [pscustomobject][ordered]@{Name='readiness';Matches=$true;Value=$readinessDiagnosis},
+    [pscustomobject][ordered]@{Name='selector';Matches=$true;Value=$selectorDiagnosis}
+) }
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "platform-breakfix-diagnosis-tests-$([guid]::NewGuid().ToString('N'))"
 try {
     [IO.Directory]::CreateDirectory($testRoot) | Out-Null
@@ -71,6 +75,8 @@ try {
 Write-Host 'PASS: both derived diagnoses survive Evidence Contract v1 artifact write/read.' -ForegroundColor Green
 $engineSource = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'scripts/ScenarioDiagnosis.ps1')
 if ($engineSource -match '(?i)kubectl|kubeconfig|\baz\b|Azure|Invoke-Scenario|patch|repair|ScenarioName|\.Scenario\b|confidence|probab|fuzzy|heuristic|ranking') { throw 'Diagnosis engine crosses a prohibited architecture boundary or uses scenario identity/probabilistic behavior.' }
-if ($engineSource -notmatch 'Matches\.Count -ne 1') { throw 'Diagnosis engine lacks an explicit exactly-one-match guard.' }
-Write-Host 'PASS: diagnosis engine is observation-only, deterministic, and explicitly exactly-one.' -ForegroundColor Green
+$foundationSource = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'foundation/DeterministicSelection.ps1')
+if ($engineSource -notmatch 'Resolve-DeterministicSelection' -or $engineSource -match 'Matches\.Count -ne 1|Assert-SingleScenarioDiagnosisMatch') { throw 'Scenario diagnosis does not delegate exclusively to the foundation selection primitive.' }
+if ($foundationSource -notmatch 'matches\.Count -ne 1') { throw 'Foundation primitive lacks the canonical exactly-one-match guard.' }
+Write-Host 'PASS: diagnosis rules delegate deterministic exactly-one selection to the sole foundation implementation.' -ForegroundColor Green
 Write-Host 'PASS: deterministic diagnosis tests completed without Kubernetes or Azure access.' -ForegroundColor Green

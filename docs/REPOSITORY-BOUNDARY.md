@@ -68,6 +68,12 @@ Generic scenario resolution, hook execution, and cleanup/finally behavior may mo
 
 Evidence shape, validation, serialization, and artifact I/O are shared-contract candidates. A generic exactly-one diagnosis executor may move to foundation; the current rules for the two breakfix scenarios remain with the breakfix catalog unless another consumer adopts the same diagnostic contract.
 
+### First implemented foundation boundary
+
+M11 designed the ownership boundary. M16 proves its first concrete in-repository extraction under `foundation/`: generic deterministic exactly-one selection is foundation-owned and has one canonical implementation. `scripts/ScenarioDiagnosis.ps1` consumes that primitive while retaining breakfix-owned observation predicates, diagnosis identifiers, summaries, and failure semantics.
+
+This is intentionally a source boundary inside `platform-breakfix`, not a new repository or package. Physical extraction to a future `cluster-foundation` repository is deferred until the primitive is proven and a separate consumer exists. No future-platform dependency exists yet, and foundation code has no dependency back into breakfix, scenarios, providers, health, dashboard, or lifecycle code.
+
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:

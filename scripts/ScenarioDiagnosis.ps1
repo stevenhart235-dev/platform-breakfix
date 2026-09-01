@@ -1,10 +1,5 @@
 Set-StrictMode -Version Latest
-
-function Assert-SingleScenarioDiagnosisMatch {
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]] $Matches)
-    if ($Matches.Count -ne 1) { throw "Scenario diagnosis requires exactly one matching rule; found $($Matches.Count)." }
-    $Matches[0]
-}
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'foundation/DeterministicSelection.ps1')
 
 function Test-ReadinessProbeFailureObservations {
     param([Parameter(Mandatory)] $Observations)
@@ -34,12 +29,9 @@ function Resolve-ScenarioDiagnosis {
     param([Parameter(Mandatory)] $Observations)
     if (-not (Get-Command Assert-ScenarioObservations -ErrorAction SilentlyContinue)) { throw 'Scenario evidence validation must be loaded before diagnosis.' }
     Assert-ScenarioObservations $Observations | Out-Null
-    $matches = @()
-    if (Test-ReadinessProbeFailureObservations $Observations) {
-        $matches += [pscustomobject][ordered]@{ Identifier='readiness_probe_failure'; Summary='Destination workload is running but not Ready because the injected readiness probe fails while the Service selector still matches.' }
-    }
-    if (Test-ServiceSelectorMismatchObservations $Observations) {
-        $matches += [pscustomobject][ordered]@{ Identifier='service_selector_mismatch'; Summary='Destination workload is running and Ready, but the Service selector does not match the destination workload label.' }
-    }
-    Assert-SingleScenarioDiagnosisMatch -Matches $matches
+    $candidates = @(
+        [pscustomobject][ordered]@{ Name='readiness'; Matches=[bool](Test-ReadinessProbeFailureObservations $Observations); Value=[pscustomobject][ordered]@{ Identifier='readiness_probe_failure'; Summary='Destination workload is running but not Ready because the injected readiness probe fails while the Service selector still matches.' } }
+        [pscustomobject][ordered]@{ Name='selector'; Matches=[bool](Test-ServiceSelectorMismatchObservations $Observations); Value=[pscustomobject][ordered]@{ Identifier='service_selector_mismatch'; Summary='Destination workload is running and Ready, but the Service selector does not match the destination workload label.' } }
+    )
+    Resolve-DeterministicSelection -Candidates $candidates
 }
