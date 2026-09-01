@@ -22,6 +22,8 @@ function Write-Evidence([string]$Artifact,[string]$Identity,[string]$Kind){
 $allowlist=@('diagnose_evidence','get_lab_status','list_profiles','list_scenarios','read_evidence')
 Assert-True (@(Compare-Object ($script:BreakfixPublicOperations|Sort-Object) $allowlist).Count -eq 0) 'Public operation allowlist changed.'
 Assert-True ($script:BreakfixOperationContractVersion -eq 1) 'Operation Contract version changed.'
+Assert-True (@(Compare-Object ($script:BreakfixOperationSets[1]|Sort-Object) $allowlist).Count -eq 0) 'Operations v1 set changed.'
+Assert-True ((($script:BreakfixOperationSets[2]|Sort-Object) -join ',') -ceq 'diagnose_evidence,get_lab_health,get_lab_status,list_profiles,list_scenarios,read_evidence') 'Operations v2 set is invalid.'
 $profiles=Invoke-BreakfixOperation list_profiles @{}
 Assert-True ($profiles.Success -and $profiles.ContractVersion -eq 1 -and $null -eq $profiles.Error) 'Profile success envelope failed.'
 Assert-True ((@($profiles.Data.Profiles).Name -join ',') -ceq 'cilium,istio,minimal') 'Profile catalog/order failed.'

@@ -2,13 +2,11 @@ Set-StrictMode -Version Latest
 
 $script:BreakfixRepositoryRoot = Split-Path -Parent $PSScriptRoot
 $script:BreakfixOperationContractVersion = 1
-$script:BreakfixPublicOperations = @(
-    'list_profiles',
-    'list_scenarios',
-    'read_evidence',
-    'diagnose_evidence',
-    'get_lab_status'
-)
+$script:BreakfixOperationSets = @{
+    1 = @('list_profiles', 'list_scenarios', 'read_evidence', 'diagnose_evidence', 'get_lab_status')
+    2 = @('list_profiles', 'list_scenarios', 'read_evidence', 'diagnose_evidence', 'get_lab_status', 'get_lab_health')
+}
+$script:BreakfixPublicOperations = @($script:BreakfixOperationSets[1])
 $script:BreakfixErrorCodes = @(
     'INVALID_ARGUMENT',
     'NOT_FOUND',
@@ -16,6 +14,7 @@ $script:BreakfixErrorCodes = @(
     'DIAGNOSIS_FAILED',
     'PROVIDER_UNSUPPORTED',
     'LAB_STATE_UNAVAILABLE',
+    'LAB_NOT_ACTIVE',
     'INTERNAL_ERROR'
 )
 
@@ -36,8 +35,8 @@ function Assert-BreakfixOperationResult {
     $missing = @($required | Where-Object { $_ -notin $fields })
     $unknown = @($fields | Where-Object { $_ -notin $required })
     if ($missing.Count -or $unknown.Count) { throw 'Breakfix operation result has an invalid envelope.' }
-    if ($Result.ContractVersion -isnot [int] -or $Result.ContractVersion -ne $script:BreakfixOperationContractVersion) { throw 'Breakfix operation result has an invalid ContractVersion.' }
-    if ($Result.Operation -isnot [string] -or $Result.Operation -cnotin $script:BreakfixPublicOperations) { throw 'Breakfix operation result has an invalid Operation.' }
+    if ($Result.ContractVersion -isnot [int] -or -not $script:BreakfixOperationSets.ContainsKey($Result.ContractVersion)) { throw 'Breakfix operation result has an invalid ContractVersion.' }
+    if ($Result.Operation -isnot [string] -or $Result.Operation -cnotin $script:BreakfixOperationSets[$Result.ContractVersion]) { throw 'Breakfix operation result has an invalid Operation.' }
     if ($Result.Success -isnot [bool]) { throw 'Breakfix operation result Success must be boolean.' }
     if ($Result.Success) {
         if ($null -eq $Result.Data -or $null -ne $Result.Error) { throw 'Successful breakfix operation results require Data and prohibit Error.' }
@@ -53,9 +52,9 @@ function Assert-BreakfixOperationResult {
 }
 
 function New-BreakfixSuccessResult {
-    param([Parameter(Mandatory)][string] $Operation, [Parameter(Mandatory)] $Data)
+    param([Parameter(Mandatory)][string] $Operation, [Parameter(Mandatory)] $Data, [ValidateSet(1, 2)][int] $ContractVersion = 1)
     Assert-BreakfixOperationResult ([pscustomobject][ordered]@{
-        ContractVersion = 1
+        ContractVersion = $ContractVersion
         Operation = $Operation
         Success = $true
         Data = $Data
@@ -67,10 +66,11 @@ function New-BreakfixFailureResult {
     param(
         [Parameter(Mandatory)][string] $Operation,
         [Parameter(Mandatory)][string] $Code,
-        [Parameter(Mandatory)][string] $Message
+        [Parameter(Mandatory)][string] $Message,
+        [ValidateSet(1, 2)][int] $ContractVersion = 1
     )
     Assert-BreakfixOperationResult ([pscustomobject][ordered]@{
-        ContractVersion = 1
+        ContractVersion = $ContractVersion
         Operation = $Operation
         Success = $false
         Data = $null
@@ -172,6 +172,13 @@ $script:BreakfixStatusReaders = @{
         Get-AksLabStatus
     }
 }
+$script:BreakfixHealthReaders = @{
+    aks = {
+        param([string] $RepositoryRoot, [string] $Profile)
+        . (Join-Path $RepositoryRoot 'scripts/LabHealth.ps1')
+        Get-AksLabHealth -Profile $Profile
+    }
+}
 
 function ConvertTo-BreakfixTimestamp {
     param($Value)
@@ -205,15 +212,37 @@ function Get-BreakfixLabStatus {
     }
 }
 
+function Get-BreakfixLabHealth {
+    param([Parameter(Mandatory)][string] $RepositoryRoot, [Parameter(Mandatory)][string] $Provider)
+    if ($Provider -cne 'aks') {
+        throw (New-BreakfixOperationException 'PROVIDER_UNSUPPORTED' "Passive lab health is not available for provider '$Provider'.")
+    }
+    $status = Get-BreakfixLabStatus -RepositoryRoot $RepositoryRoot -Provider $Provider
+    if ($status.State -cne 'ACTIVE' -or [string]::IsNullOrWhiteSpace([string]$status.Profile)) {
+        throw (New-BreakfixOperationException 'LAB_NOT_ACTIVE' "Lab health requires an observable active lab for provider '$Provider'.")
+    }
+    try {
+        . (Join-Path $RepositoryRoot 'scripts/LabHealth.ps1')
+        $health = & $script:BreakfixHealthReaders.aks $RepositoryRoot $status.Profile
+        Assert-LabHealthContract $health | Out-Null
+        $health
+    }
+    catch {
+        throw (New-BreakfixOperationException 'LAB_STATE_UNAVAILABLE' "Lab health is currently unavailable for provider '$Provider'.")
+    }
+}
+
 function Invoke-BreakfixOperation {
     param(
         [Parameter(Mandatory)][string] $Operation,
-        [hashtable] $Arguments = @{}
+        [hashtable] $Arguments = @{},
+        [ValidateSet(1, 2)][int] $ContractVersion = 1
     )
     $RepositoryRoot = $script:BreakfixRepositoryRoot
-    if ($Operation -cnotin $script:BreakfixPublicOperations) {
+    $operations = $script:BreakfixOperationSets[$ContractVersion]
+    if ($Operation -cnotin $operations) {
         return [pscustomobject][ordered]@{
-            ContractVersion = 1; Operation = $Operation; Success = $false; Data = $null
+            ContractVersion = $ContractVersion; Operation = $Operation; Success = $false; Data = $null
             Error = [pscustomobject][ordered]@{ Code = 'INVALID_ARGUMENT'; Message = "Unknown breakfix operation '$Operation'." }
         }
     }
@@ -244,12 +273,17 @@ function Invoke-BreakfixOperation {
                 if (-not $Arguments.ContainsKey('Provider') -or [string]::IsNullOrWhiteSpace([string]$Arguments.Provider)) { throw (New-BreakfixOperationException 'INVALID_ARGUMENT' 'Provider is required.') }
                 Get-BreakfixLabStatus -RepositoryRoot $RepositoryRoot -Provider ([string]$Arguments.Provider)
             }
+            'get_lab_health' {
+                Assert-BreakfixOperationArguments $Arguments @('Provider')
+                if (-not $Arguments.ContainsKey('Provider') -or [string]::IsNullOrWhiteSpace([string]$Arguments.Provider)) { throw (New-BreakfixOperationException 'INVALID_ARGUMENT' 'Provider is required.') }
+                Get-BreakfixLabHealth -RepositoryRoot $RepositoryRoot -Provider ([string]$Arguments.Provider)
+            }
         }
-        New-BreakfixSuccessResult -Operation $Operation -Data $data
+        New-BreakfixSuccessResult -Operation $Operation -Data $data -ContractVersion $ContractVersion
     }
     catch {
         $code = if ($_.Exception.Data.Contains('BreakfixErrorCode')) { [string]$_.Exception.Data['BreakfixErrorCode'] } else { 'INTERNAL_ERROR' }
         $message = if ($code -eq 'INTERNAL_ERROR') { 'The breakfix operation could not be completed.' } else { $_.Exception.Message }
-        New-BreakfixFailureResult -Operation $Operation -Code $code -Message $message
+        New-BreakfixFailureResult -Operation $Operation -Code $code -Message $message -ContractVersion $ContractVersion
     }
 }

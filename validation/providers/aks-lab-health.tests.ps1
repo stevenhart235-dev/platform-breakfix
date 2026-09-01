@@ -145,7 +145,7 @@ Assert-True (-not $collected.Endpoints.Available -and (New-LabHealthContract $co
 $healthSource=Get-Content -Raw (Join-Path $repositoryRoot 'scripts/LabHealth.ps1')
 foreach($term in @("'exec'",'pods/exec',"'apply'", "'patch'", "'delete'", "'rollout'",'get-credentials','update-kubeconfig','Resolve-ScenarioDiagnosis','readiness_probe_failure','service_selector_mismatch')) { Assert-True ($healthSource -notmatch [regex]::Escape($term)) "Health source contains forbidden dependency or mutation '$term'." }
 $operationsSource=Get-Content -Raw (Join-Path $repositoryRoot 'scripts/BreakfixOperations.ps1')
-Assert-True ($operationsSource -notmatch 'get_lab_health') 'M12 Operations v1 was expanded.'
+Assert-True ($operationsSource -match 'get_lab_health') 'M15 get_lab_health operation is missing.'
 . (Join-Path $repositoryRoot 'scripts/BreakfixOperations.ps1')
 Assert-True ((@($script:BreakfixPublicOperations|Sort-Object) -join ',') -ceq 'diagnose_evidence,get_lab_status,list_profiles,list_scenarios,read_evidence') 'M12 five-operation allowlist changed.'
 Assert-Fails 'EKS health unsupported' { Get-EksLabHealth }

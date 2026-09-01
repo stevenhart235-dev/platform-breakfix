@@ -83,6 +83,6 @@ Invoke-DashboardTest '' -Failure
 $m13Hash = git rev-parse 'HEAD:scripts/LabHealth.ps1'
 $currentM13Hash = git hash-object (Join-Path $repositoryRoot 'scripts/LabHealth.ps1')
 Assert-True ($m13Hash -ceq $currentM13Hash) 'Canonical Lab Health implementation changed.'
-$operations = Get-Content -Raw (Join-Path $repositoryRoot 'scripts/BreakfixOperations.ps1')
-Assert-True ($operations -notmatch 'get_lab_health') 'M12 Operations v1 was expanded.'
+. (Join-Path $repositoryRoot 'scripts/BreakfixOperations.ps1')
+Assert-True ((@($script:BreakfixOperationSets[1] | Sort-Object) -join ',') -ceq 'diagnose_evidence,get_lab_status,list_profiles,list_scenarios,read_evidence') 'M12 Operations v1 was expanded.'
 Write-Host 'PASS: AKS Lab Health Dashboard tests.' -ForegroundColor Green

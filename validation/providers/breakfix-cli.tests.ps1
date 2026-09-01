@@ -42,7 +42,7 @@ $notFound=Invoke-TestCli @('evidence','read','readiness-probe-failure','-Json')
 Assert-True ($notFound.ExitCode -ne 0) 'Missing evidence succeeded.'
 $n=$notFound.Output|ConvertFrom-Json
 Assert-True ($n.Operation -ceq 'read_evidence' -and $n.Error.Code -ceq 'NOT_FOUND') 'Evidence failure mapped incorrectly.'
-$source=Get-Content -Raw $cli
+$source=(Get-Content -Raw $cli)+(Get-Content -Raw (Join-Path $repositoryRoot 'scripts/BreakfixCli.ps1'))
 Assert-True ($source -match 'Invoke-BreakfixOperation') 'CLI does not delegate.'
 foreach($mapping in @('list_profiles','list_scenarios','read_evidence','diagnose_evidence','get_lab_status')){Assert-True ($source -match [regex]::Escape($mapping)) "Missing mapping: $mapping"}
 foreach($term in @('Get-ChildItem','ConvertFrom-Json','Read-ScenarioEvidence','Resolve-ScenarioDiagnosis','profile.psd1','scenario.psd1','readiness_probe_failure','service_selector_mismatch','az ','aws ','kubectl ','tofu ')){Assert-True ($source -notmatch [regex]::Escape($term)) "CLI business/provider logic found: $term"}
