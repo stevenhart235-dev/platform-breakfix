@@ -72,7 +72,9 @@ Evidence shape, validation, serialization, and artifact I/O are shared-contract 
 
 M11 designed the ownership boundary. M16 proves its first concrete in-repository extraction under `foundation/`: generic deterministic exactly-one selection is foundation-owned and has one canonical implementation. `scripts/ScenarioDiagnosis.ps1` consumes that primitive while retaining breakfix-owned observation predicates, diagnosis identifiers, summaries, and failure semantics.
 
-This is intentionally a source boundary inside `platform-breakfix`, not a new repository or package. Physical extraction to a future `cluster-foundation` repository is deferred until the primitive is proven and a separate consumer exists. No future-platform dependency exists yet, and foundation code has no dependency back into breakfix, scenarios, providers, health, dashboard, or lifecycle code.
+This is intentionally a source boundary inside `platform-breakfix`, not a new repository or package. No future-platform dependency exists yet, and foundation code has no dependency back into breakfix, scenarios, providers, health, dashboard, or lifecycle code.
+
+M17 proves a second genuine, independent consumer after rejecting profile resolution as a force-fit: `providers/azure/aks/scripts/Lab-Aks.ps1` delegates the existing bounded managed-Istio revision zero/one/many decision to the same primitive. Azure catalog acquisition, the requested revision predicate, Kubernetes compatibility, and lifecycle errors remain provider-owned. The two consumers—breakfix diagnosis and AKS managed-Istio revision resolution—do not depend on each other, and generic selection remains implemented once. Physical extraction to a future `cluster-foundation` repository is now architecturally justified but remains intentionally deferred to a separate milestone.
 
 ## Breakfix capability interface
 

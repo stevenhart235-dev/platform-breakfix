@@ -23,7 +23,7 @@ Assert-Fails 'null candidate input' { Resolve-DeterministicSelection -Candidates
 Assert-Fails 'null value' { Resolve-DeterministicSelection -Candidates @([pscustomobject]@{Name='alpha';Matches=$true;Value=$null}) }
 
 $source = Get-Content -Raw -LiteralPath $primitivePath
-foreach ($term in @('readiness_probe_failure','service_selector_mismatch','readiness-probe-failure','service-selector-mismatch','Scenario','kubectl','az','aws','Azure','AKS','EKS','Kubernetes','Pod','Service','EndpointSlice','HTTP','DNS','Invoke-Expression','Start-Process','& ','Set-Content','Add-Content','Remove-Item','Move-Item','Copy-Item')) {
+foreach ($term in @('readiness_probe_failure','service_selector_mismatch','readiness-probe-failure','service-selector-mismatch','Scenario','kubectl','az','aws','Azure','AKS','EKS','Kubernetes','Istio','revision','mesh','profile','Pod','Service','EndpointSlice','HTTP','DNS','Invoke-Expression','Start-Process','& ','Set-Content','Add-Content','Remove-Item','Move-Item','Copy-Item')) {
     if ($source -cmatch [regex]::Escape($term)) { throw "Foundation primitive contains prohibited dependency or capability '$term'." }
 }
 if ($source -match '(?i)ScenarioDiagnosis|ScenarioEvidence|BreakfixOperations|BreakfixCli|LabHealth|dashboard|providers[/\\]|profiles[/\\]|\.\s+\(') { throw 'Foundation primitive imports or references an upstream consumer.' }

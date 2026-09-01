@@ -1,5 +1,8 @@
 Set-StrictMode -Version Latest
 
+$script:AksRepositoryRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+. (Join-Path $script:AksRepositoryRoot 'foundation/DeterministicSelection.ps1')
+
 $script:AksDefaults = @{
     SubscriptionId        = '0071dee8-974f-4f93-ad2a-0960557e1888'
     SubscriptionName      = 'Ordicor Platform Lab'
@@ -213,6 +216,28 @@ function Get-AzureManagementValue {
     Invoke-RestMethod -Uri $Uri -Headers @{ Authorization = "Bearer $token" }
 }
 
+function Resolve-AksManagedIstioRevision {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]] $Revisions,
+        [Parameter(Mandatory)][string] $RequestedRevision,
+        [Parameter(Mandatory)][string] $KubernetesMinorVersion
+    )
+    $candidates = for ($index = 0; $index -lt $Revisions.Count; $index++) {
+        [pscustomobject][ordered]@{
+            Name = 'candidate-{0:D8}' -f $index
+            Matches = [string]$Revisions[$index].revision -ceq $RequestedRevision
+            Value = $Revisions[$index]
+        }
+    }
+    try { $selected = Resolve-DeterministicSelection -Candidates @($candidates) }
+    catch { Stop-AksLifecycle "Managed Istio revision '$RequestedRevision' is not offered for Kubernetes $KubernetesMinorVersion in $($script:AksDefaults.Location)." }
+    $compatible = @($selected.compatibleWith | Where-Object { $_.name -ceq 'KubernetesOfficial' -and $_.versions -contains $KubernetesMinorVersion })
+    if ($compatible.Count -ne 1) {
+        Stop-AksLifecycle "Managed Istio revision '$RequestedRevision' is not offered for Kubernetes $KubernetesMinorVersion in $($script:AksDefaults.Location)."
+    }
+    $selected
+}
+
 function Invoke-AksDoctor {
     param([Parameter(Mandatory)][string] $TofuPath, [Parameter(Mandatory)] $Profile)
 
@@ -270,12 +295,8 @@ function Invoke-AksDoctor {
             Stop-AksLifecycle "Could not query managed Istio revisions: $($meshResult -join [Environment]::NewLine)"
         }
         $meshRevisions = ($meshResult -join [Environment]::NewLine) | ConvertFrom-Json
-        $selected = @($meshRevisions.meshRevisions | Where-Object { $_.revision -ceq $Profile.InfrastructureInputs.IstioRevision })
         $minorVersion = ($script:AksDefaults.KubernetesVersion -split '\.')[0..1] -join '.'
-        $compatible = @($selected.compatibleWith | Where-Object { $_.name -ceq 'KubernetesOfficial' -and $_.versions -contains $minorVersion })
-        if ($selected.Count -ne 1 -or $compatible.Count -ne 1) {
-            Stop-AksLifecycle "Managed Istio revision '$($Profile.InfrastructureInputs.IstioRevision)' is not offered for Kubernetes $minorVersion in $($script:AksDefaults.Location)."
-        }
+        Resolve-AksManagedIstioRevision -Revisions @($meshRevisions.meshRevisions) -RequestedRevision $Profile.InfrastructureInputs.IstioRevision -KubernetesMinorVersion $minorVersion | Out-Null
         Write-Host "PASS: Managed Istio revision $($Profile.InfrastructureInputs.IstioRevision) is offered for Kubernetes $minorVersion." -ForegroundColor Green
     }
 
