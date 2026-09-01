@@ -80,6 +80,13 @@ M18 designed that physical move. M19 published signed `cluster-foundation` v0.1.
 
 After M20, `cluster-foundation` is the sole canonical owner of deterministic selection. Both platform consumers load its pinned source directly; the former local implementation and neutral test are removed. Foundation owns neutral unit/contract tests, while the platform owns dependency-integrity and consumer compatibility tests. Floating branches, runtime downloads, vendored fallbacks, and manual source copying are forbidden. Fresh clones use `git clone --recurse-submodules`; existing clones use `git submodule update --init --recursive`. Rollback reverts the complete M20 migration commit, or atomically restores a prior gitlink and lock for a later dependency update.
 
+### Lifecycle foundation boundary
+
+M21 audits the active AKS and EKS lifecycles without changing implementation. The next boundary is not a shared orchestrator or generic cross-cloud OpenTofu layer. Providers own cloud discovery, credentials, infrastructure/state, connection mutation, and resource cleanup; breakfix owns profiles, scenarios, TTL/cost policy, operator ordering, expected-failure semantics, acceptance, and cleanup priority.
+
+The smallest ready slice is pure lifecycle-status normalization beneath Breakfix Operations. Foundation may validate a bounded provider observation and normalize it to `NO_LAB`, `ACTIVE`, `STALE`, or `UNKNOWN`; it must not collect cloud facts, turn collection failures into successful `UNKNOWN`, or own the Operations envelope. AKS has a real producer/consumer seam. EKS remains unsupported until an AWS-native adapter proves ownership and temporal state; EKS control-plane `ACTIVE` alone is not lab `ACTIVE`.
+
+Connection-context, lifecycle error/result, plan/provision, and destroy/verify-clean remain candidates, not approved extraction. They require decoupling or EKS parity first. AKS zero-leftover verification must not be weakened, preserved ECR ownership must stay explicit, credentials must never enter a shared context, and provider modules/state remain independent. See [AKS-MILESTONE-21.md](AKS-MILESTONE-21.md).
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:
