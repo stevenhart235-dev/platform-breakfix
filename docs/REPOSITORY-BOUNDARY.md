@@ -76,6 +76,8 @@ This is intentionally a source boundary inside `platform-breakfix`, not a new re
 
 M17 proves a second genuine, independent consumer after rejecting profile resolution as a force-fit: `providers/azure/aks/scripts/Lab-Aks.ps1` delegates the existing bounded managed-Istio revision zero/one/many decision to the same primitive. Azure catalog acquisition, the requested revision predicate, Kubernetes compatibility, and lifecycle errors remain provider-owned. The two consumers—breakfix diagnosis and AKS managed-Istio revision resolution—do not depend on each other, and generic selection remains implemented once. Physical extraction to a future `cluster-foundation` repository is now architecturally justified but remains intentionally deferred to a separate milestone.
 
+M18 designs that physical move without performing it. The initial standalone repository contains only deterministic selection source, neutral tests, and its contract documentation. `platform-breakfix` will consume it through an allowlisted Git submodule at `external/cluster-foundation`, pinned by gitlink commit SHA and audited through a lock manifest that records the repository URL, signed semantic tag, and commit. Floating branches, runtime downloads, and retained vendored copies are forbidden. Migration must rewire both consumers and remove the in-repository implementation in one tested platform change so exactly one active canonical implementation remains.
+
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:
