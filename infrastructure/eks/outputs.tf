@@ -8,6 +8,16 @@ output "aws_region" {
   value       = var.aws_region
 }
 
+output "eks_lifecycle_metadata" {
+  description = "Immutable non-secret EKS lifecycle identity persisted on AWS ownership anchors."
+  value       = local.eks_lifecycle_metadata
+}
+
+output "eks_lifecycle_tags" {
+  description = "Non-secret tag representation of the immutable EKS lifecycle metadata."
+  value       = local.eks_lifecycle_tags
+}
+
 output "availability_zones" {
   description = "First three available availability zones in the configured AWS region."
   value       = slice(data.aws_availability_zones.available.names, 0, 3)

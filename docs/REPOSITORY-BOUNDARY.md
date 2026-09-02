@@ -127,3 +127,8 @@ Breakfix Operations v1 exposes the read-only subset `list_profiles`, `list_scena
 - Promote reusable code only with a consuming `platform-breakfix` integration and regression parity; do not copy it speculatively.
 - Reject application-platform vocabulary and placeholders at review time.
 - Update this boundary document before approving a change that alters repository ownership or dependency direction.
+### EKS immutable lifecycle metadata
+
+M24 adds provider-owned metadata schema v1 without changing foundation or Breakfix Operations. A state-backed UUID and creation timestamp plus the creation-only EKS lifetime produce immutable `LabId`, `AccountId`, `Region`, `CreatedAt`, and absolute `ExpiresAt`; namespaced tags persist the complete non-secret record on the VPC/network, EKS, and EBS pod-identity ownership set. The VPC is the earliest partial-provision anchor, preserved ECR remains outside the lifecycle, and existing destroy ordering is unchanged.
+
+A saved OpenTofu plan is used only to bind the creation-time lifetime to first apply; this is not broad EKS plan-parity work. Account/region conflicts fail closed and later duration changes cannot extend expiry. Cloud tags are the future status authority; local state corroborates and ignored runtime plans are non-authoritative. EKS status and verify-clean remain unsupported until a later provider observation milestone. See [EKS-MILESTONE-24.md](EKS-MILESTONE-24.md).

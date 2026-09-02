@@ -113,10 +113,9 @@ provision protection.
 From Windows PowerShell:
 
 ```powershell
-cd infrastructure\eks
-tofu init
-tofu apply
-cd ..\..
+tofu -chdir=infrastructure\eks init
+.\scripts\New-EksLabPlan.ps1 -LifetimeHours 4
+.\scripts\Apply-EksLabPlan.ps1
 .\scripts\Connect-Cluster.ps1
 ```
 

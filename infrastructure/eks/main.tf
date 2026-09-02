@@ -23,6 +23,9 @@ module "vpc" {
 
   map_public_ip_on_launch = true
 
+  tags     = local.eks_lifecycle_tags
+  vpc_tags = local.eks_lifecycle_tags
+
   public_subnet_tags = {
     "kubernetes.io/role/elb" = 1
   }
@@ -39,6 +42,9 @@ module "eks" {
   endpoint_public_access  = true
 
   enable_cluster_creator_admin_permissions = true
+
+  tags         = local.eks_lifecycle_tags
+  cluster_tags = local.eks_lifecycle_tags
 
   enabled_log_types           = []
   create_cloudwatch_log_group = false
@@ -95,4 +101,5 @@ module "ebs_csi_pod_identity" {
   name = "${var.cluster_name}-ebs-csi"
 
   attach_aws_ebs_csi_policy = true
+  tags                      = local.eks_lifecycle_tags
 }

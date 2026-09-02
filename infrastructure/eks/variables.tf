@@ -16,6 +16,17 @@ variable "kubernetes_version" {
   default     = "1.36"
 }
 
+variable "eks_lifetime_hours" {
+  description = "Creation-only advisory lifetime for a new EKS lab lifecycle."
+  type        = number
+  default     = 4
+
+  validation {
+    condition     = var.eks_lifetime_hours >= 1 && var.eks_lifetime_hours <= 24 && floor(var.eks_lifetime_hours) == var.eks_lifetime_hours
+    error_message = "EKS lifetime must be a whole number of hours from 1 through 24."
+  }
+}
+
 variable "ecr_repositories" {
   description = "ECR repositories to create, keyed by a stable logical identifier."
   type = map(object({
