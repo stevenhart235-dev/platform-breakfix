@@ -97,6 +97,11 @@ The platform pins the v0.2.0 gitlink and lock, verifies both foundation source b
 M23 confirms the v0.2.0 lifecycle-status contract can accept a future EKS observation without modification, but EKS is not ready to produce one. Current project-level tags, configurable name, dynamic AWS account, and local state do not prove one immutable lab; no persistent `ExpiresAt` or EKS advisory TTL exists. Cluster not-found alone cannot mean `NO_LAB` because owned network/IAM/generated resources may remain.
 
 EKS status remains unsupported. Before discovery/Operations support, provider-native provisioning must persist a unique account/region-bound lab identity plus one-time creation/expiry metadata across owned lifecycle resources, with preserved ECR explicitly external. AWS/API failures remain collection failures, never successful `UNKNOWN`; Kubernetes health remains outside status. See [EKS-MILESTONE-23.md](EKS-MILESTONE-23.md).
+### EKS advisory lifetime policy
+
+M24A establishes EKS-owned breakfix policy required for future immutable lifecycle metadata: a 4-hour default and a creation-only whole-hour override from 1 through 24. The future operator surface is `-LifetimeHours`; it is lifecycle input, not profile configuration. `CreatedAt` and absolute `ExpiresAt` are generated once at lifecycle creation and never extended by later configuration or operations. Expiration is advisory and never destroys resources automatically.
+
+AKS independently uses the same current default/bounds; equal values do not create a shared policy contract. Breakfix owns the EKS duration/bounds, the EKS provider will persist metadata, foundation only normalizes temporal observations, and Operations only presents status. M24 may resume within its original scope; EKS status and verify-clean remain unauthorized. See [EKS-MILESTONE-24A.md](EKS-MILESTONE-24A.md).
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:
