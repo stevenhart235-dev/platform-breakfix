@@ -92,6 +92,11 @@ Connection-context, lifecycle error/result, plan/provision, and destroy/verify-c
 M22 publishes signed `cluster-foundation` v0.2.0 at commit `d042fa4e9a3b8ef975554fa56b7c9a4b61547e54` and atomically transfers pure lifecycle-status normalization. Foundation now owns strict neutral observation validation and deterministic `NO_LAB`/`ACTIVE`/`STALE`/`UNKNOWN` normalization. AKS retains Azure discovery and native observation interpretation; Breakfix Operations retains provider support, envelopes, errors, result fields, and presentation. EKS status remains unsupported.
 
 The platform pins the v0.2.0 gitlink and lock, verifies both foundation source blobs and the signed tag, and contains no duplicate generic lifecycle-status implementation. This extraction does not authorize connection, plan/provision, lifecycle error, destroy/verify-clean, or orchestration work. Rollback restores the complete v0.1.0 dependency and consumer commit atomically; source copying is forbidden. See [AKS-MILESTONE-22.md](AKS-MILESTONE-22.md).
+### EKS lifecycle-status discovery boundary
+
+M23 confirms the v0.2.0 lifecycle-status contract can accept a future EKS observation without modification, but EKS is not ready to produce one. Current project-level tags, configurable name, dynamic AWS account, and local state do not prove one immutable lab; no persistent `ExpiresAt` or EKS advisory TTL exists. Cluster not-found alone cannot mean `NO_LAB` because owned network/IAM/generated resources may remain.
+
+EKS status remains unsupported. Before discovery/Operations support, provider-native provisioning must persist a unique account/region-bound lab identity plus one-time creation/expiry metadata across owned lifecycle resources, with preserved ECR explicitly external. AWS/API failures remain collection failures, never successful `UNKNOWN`; Kubernetes health remains outside status. See [EKS-MILESTONE-23.md](EKS-MILESTONE-23.md).
 ## Breakfix capability interface
 
 The transport-neutral breakfix contract is limited to:
